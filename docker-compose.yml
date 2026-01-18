@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  workout-tracker:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - workout-data:/app/data
+    environment:
+      - FLASK_APP=app.py
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+
+volumes:
+  workout-data:

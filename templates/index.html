@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Workout Tracker</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Workout Tracker</h1>
+        </header>
+
+        <div class="content">
+            <section class="input-section">
+                <h2>Add Workout</h2>
+                <form id="workoutForm">
+                    <div class="form-group">
+                        <label for="date">Date:</label>
+                        <input type="date" id="date" name="date" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="workout">Workout:</label>
+                        <input type="text" id="workout" name="workout" placeholder="e.g., Chest Day, Leg Day" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="exercise">Exercise:</label>
+                        <input type="text" id="exercise" name="exercise" placeholder="e.g., Bench Press, Squats" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="weight">Weight (lbs):</label>
+                        <input type="number" id="weight" name="weight" step="0.1" placeholder="e.g., 135" required>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Add Workout</button>
+                </form>
+                <div id="message" class="message"></div>
+            </section>
+
+            <section class="list-section">
+                <h2>Workout History</h2>
+                <div id="workoutList" class="workout-list">
+                    <p class="loading">Loading workouts...</p>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

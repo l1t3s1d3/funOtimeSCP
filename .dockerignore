@@ -1,0 +1,13 @@
+*.db
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.git
+.gitignore
+README.md
+.env
+venv/
+env/
