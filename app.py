@@ -1,94 +1,132 @@
-from flask import Flask, request, jsonify, render_template
-from flask_cors import CORS
-import sqlite3
-from datetime import datetime
+"""Main Flask application"""
 import os
+from datetime import timedelta
+from flask import Flask, render_template
+from dotenv import load_dotenv
 
-app = Flask(__name__)
-CORS(app)
+# Load environment variables
+load_dotenv()
 
-# Use data directory if it exists (Docker), otherwise use current directory
-DATA_DIR = '/app/data' if os.path.exists('/app/data') else '.'
-DATABASE = os.path.join(DATA_DIR, 'workouts.db')
+# Import extensions
+from extensions import db, migrate, jwt, bcrypt, cors, init_extensions
 
-def get_db_connection():
-    """Create a database connection"""
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
-    return conn
+# Import models (needed for migrations)
+from models import Vulnerability, VulnerabilityHistory, User, JiraTicket, VulnerabilitySource
 
-def init_db():
-    """Initialize the database with the workouts table"""
-    conn = get_db_connection()
-    conn.execute('''
-        CREATE TABLE IF NOT EXISTS workouts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            date TEXT NOT NULL,
-            workout TEXT NOT NULL,
-            exercise TEXT NOT NULL,
-            weight REAL NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+# Import blueprints
+from api import auth_bp, vulnerabilities_bp, jira_bp, reports_bp, import_bp
+
+
+def create_app():
+    """Create and configure Flask application"""
+    app = Flask(__name__)
+
+    # Configuration
+    app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
+    app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'dev-jwt-secret-key-change-in-production')
+    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)
+    app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
+
+    # Database configuration
+    data_dir = os.getenv('DATA_DIR', 'data')
+    os.makedirs(data_dir, exist_ok=True)
+
+    database_url = os.getenv('DATABASE_URL', f'sqlite:///{data_dir}/vulnerabilities.db')
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+    # File upload configuration
+    app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max upload
+    app.config['UPLOAD_FOLDER'] = 'uploads'
+    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
+    # Initialize extensions
+    init_extensions(app)
+
+    # Register blueprints
+    app.register_blueprint(auth_bp)
+    app.register_blueprint(vulnerabilities_bp)
+    app.register_blueprint(jira_bp)
+    app.register_blueprint(reports_bp)
+    app.register_blueprint(import_bp)
+
+    # Web routes
+    @app.route('/')
+    def index():
+        """Serve main application page"""
+        return render_template('index.html')
+
+    @app.route('/login')
+    def login_page():
+        """Serve login page"""
+        return render_template('login.html')
+
+    @app.route('/dashboard')
+    def dashboard():
+        """Serve dashboard page"""
+        return render_template('dashboard.html')
+
+    @app.route('/vulnerabilities')
+    def vulnerabilities_page():
+        """Serve vulnerabilities list page"""
+        return render_template('vulnerabilities.html')
+
+    @app.route('/reports')
+    def reports_page():
+        """Serve reports page"""
+        return render_template('reports.html')
+
+    @app.route('/import')
+    def import_page():
+        """Serve import page"""
+        return render_template('import.html')
+
+    # Create tables and initial data
+    with app.app_context():
+        db.create_all()
+        init_database()
+
+    return app
+
+
+def init_database():
+    """Initialize database with default data"""
+    # Create default admin user if none exists
+    if User.query.count() == 0:
+        admin_email = os.getenv('ADMIN_EMAIL', 'admin@example.com')
+        admin_password = os.getenv('ADMIN_PASSWORD', 'admin')
+
+        admin = User(
+            username='admin',
+            email=admin_email,
+            full_name='System Administrator',
+            role='admin',
+            is_admin=True,
+            is_active=True
         )
-    ''')
-    conn.commit()
-    conn.close()
+        admin.set_password(admin_password)
 
-@app.route('/')
-def index():
-    """Serve the main page"""
-    return render_template('index.html')
+        db.session.add(admin)
+        db.session.commit()
 
-@app.route('/api/workouts', methods=['GET'])
-def get_workouts():
-    """Get all workouts"""
-    conn = get_db_connection()
-    workouts = conn.execute('SELECT * FROM workouts ORDER BY date DESC, created_at DESC').fetchall()
-    conn.close()
+        print(f"Created default admin user: {admin_email}")
+        print(f"Default password: {admin_password}")
+        print("PLEASE CHANGE THE DEFAULT PASSWORD AFTER FIRST LOGIN!")
 
-    return jsonify([dict(row) for row in workouts])
+    # Initialize vulnerability sources
+    sources = ['Wiz', 'Veracode', 'Arctic Wolf', 'Crowdstrike', 'Burp']
+    for source_name in sources:
+        if not VulnerabilitySource.query.filter_by(name=source_name).first():
+            source = VulnerabilitySource(
+                name=source_name,
+                sync_type='csv',
+                enabled=True
+            )
+            db.session.add(source)
 
-@app.route('/api/workouts', methods=['POST'])
-def add_workout():
-    """Add a new workout"""
-    data = request.get_json()
+    db.session.commit()
 
-    # Validate required fields
-    required_fields = ['date', 'workout', 'exercise', 'weight']
-    for field in required_fields:
-        if field not in data:
-            return jsonify({'error': f'Missing required field: {field}'}), 400
-
-    try:
-        # Validate date format
-        datetime.strptime(data['date'], '%Y-%m-%d')
-
-        # Validate weight is a number
-        weight = float(data['weight'])
-
-        conn = get_db_connection()
-        conn.execute(
-            'INSERT INTO workouts (date, workout, exercise, weight) VALUES (?, ?, ?, ?)',
-            (data['date'], data['workout'], data['exercise'], weight)
-        )
-        conn.commit()
-        conn.close()
-
-        return jsonify({'message': 'Workout added successfully'}), 201
-    except ValueError as e:
-        return jsonify({'error': 'Invalid data format'}), 400
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/workouts/<int:workout_id>', methods=['DELETE'])
-def delete_workout(workout_id):
-    """Delete a workout"""
-    conn = get_db_connection()
-    conn.execute('DELETE FROM workouts WHERE id = ?', (workout_id,))
-    conn.commit()
-    conn.close()
-
-    return jsonify({'message': 'Workout deleted successfully'}), 200
 
 if __name__ == '__main__':
-    init_db()
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    app = create_app()
+    app.run(host='0.0.0.0', port=5000, debug=os.getenv('FLASK_ENV') == 'development')

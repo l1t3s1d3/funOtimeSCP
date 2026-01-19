@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vulnerabilities - VulnMS</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <header class="header">
+        <nav class="nav">
+            <a href="/dashboard" class="logo">🔒 VulnMS</a>
+            <ul class="nav-links">
+                <li><a href="/dashboard">Dashboard</a></li>
+                <li><a href="/vulnerabilities">Vulnerabilities</a></li>
+                <li><a href="/reports">Reports</a></li>
+                <li><a href="/import">Import</a></li>
+            </ul>
+            <div class="user-menu">
+                <span class="user-info" id="userInfo"></span>
+                <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
+            </div>
+        </nav>
+    </header>
+
+    <div class="container">
+        <h1 style="color: var(--accent-gold); margin-bottom: 2rem;">Vulnerabilities</h1>
+
+        <!-- Filters -->
+        <div class="card">
+            <div class="card-header">
+                <h3>Filters</h3>
+                <button class="btn btn-secondary btn-sm" onclick="clearFilters()">Clear All</button>
+            </div>
+            <div class="filters">
+                <div class="form-group">
+                    <label class="form-label">Severity</label>
+                    <select id="severityFilter" class="form-select">
+                        <option value="">All</option>
+                        <option value="Critical">Critical</option>
+                        <option value="High">High</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Low">Low</option>
+                        <option value="Informational">Informational</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Status</label>
+                    <select id="statusFilter" class="form-select">
+                        <option value="">All</option>
+                        <option value="open">Open</option>
+                        <option value="in-progress">In Progress</option>
+                        <option value="resolved">Resolved</option>
+                        <option value="false-positive">False Positive</option>
+                        <option value="risk-accepted">Risk Accepted</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Environment</label>
+                    <select id="environmentFilter" class="form-select">
+                        <option value="">All</option>
+                        <option value="Production">Production</option>
+                        <option value="Stage">Stage</option>
+                        <option value="Test">Test</option>
+                        <option value="Dev">Dev</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Source</label>
+                    <select id="sourceFilter" class="form-select">
+                        <option value="">All</option>
+                        <option value="Wiz">Wiz</option>
+                        <option value="Veracode">Veracode</option>
+                        <option value="Arctic Wolf">Arctic Wolf</option>
+                    </select>
+                </div>
+            </div>
+            <button class="btn btn-primary" onclick="applyFilters()">Apply Filters</button>
+        </div>
+
+        <!-- Vulnerabilities Table -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Results: <span id="totalCount">0</span></h3>
+                <button class="btn btn-secondary btn-sm" onclick="exportCSV()">Export CSV</button>
+            </div>
+            <div class="table-container">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>CVE/ID</th>
+                            <th>Title</th>
+                            <th>Severity</th>
+                            <th>Status</th>
+                            <th>Environment</th>
+                            <th>Asset</th>
+                            <th>Date Found</th>
+                        </tr>
+                    </thead>
+                    <tbody id="vulnTableBody">
+                        <tr><td colspan="7" style="text-align: center;">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination" id="pagination"></div>
+        </div>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script>
+        requireAuth();
+        const user = getUser();
+        if (user) {
+            document.getElementById('userInfo').textContent = `${user.full_name || user.username}`;
+        }
+
+        let currentPage = 1;
+        let currentFilters = {};
+
+        async function loadVulnerabilities() {
+            const filters = {
+                ...currentFilters,
+                page: currentPage,
+                per_page: 50
+            };
+
+            try {
+                const data = await VulnerabilityAPI.list(filters);
+                displayVulnerabilities(data.vulnerabilities || []);
+                displayPagination(data);
+                document.getElementById('totalCount').textContent = data.total || 0;
+            } catch (error) {
+                console.error('Error loading vulnerabilities:', error);
+                showAlert('Error loading vulnerabilities', 'error');
+            }
+        }
+
+        function displayVulnerabilities(vulnerabilities) {
+            const tbody = document.getElementById('vulnTableBody');
+            if (vulnerabilities.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">No vulnerabilities found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = vulnerabilities.map(v => `
+                <tr style="cursor: pointer;" onclick="window.location.href='/vulnerabilities#${v.id}'">
+                    <td><strong>${v.cve_id || v.source_id || 'N/A'}</strong></td>
+                    <td>${v.title}</td>
+                    <td><span class="badge ${getSeverityBadgeClass(v.severity)}">${v.severity}</span></td>
+                    <td><span class="badge ${getStatusBadgeClass(v.status)}">${v.status}</span></td>
+                    <td>${v.environment || 'Unknown'}</td>
+                    <td>${v.asset_name || 'N/A'}</td>
+                    <td>${formatDate(v.date_found)}</td>
+                </tr>
+            `).join('');
+        }
+
+        function displayPagination(data) {
+            const pagination = document.getElementById('pagination');
+            const pages = data.pages || 1;
+            const current = data.page || 1;
+
+            let html = '';
+            html += `<button onclick="changePage(${current - 1})" ${current === 1 ? 'disabled' : ''}>Previous</button>`;
+
+            for (let i = 1; i <= Math.min(pages, 10); i++) {
+                html += `<button onclick="changePage(${i})" class="${i === current ? 'active' : ''}">${i}</button>`;
+            }
+
+            html += `<button onclick="changePage(${current + 1})" ${current === pages ? 'disabled' : ''}>Next</button>`;
+            pagination.innerHTML = html;
+        }
+
+        function changePage(page) {
+            currentPage = page;
+            loadVulnerabilities();
+        }
+
+        function applyFilters() {
+            currentFilters = {
+                severity: document.getElementById('severityFilter').value,
+                status: document.getElementById('statusFilter').value,
+                environment: document.getElementById('environmentFilter').value,
+                source: document.getElementById('sourceFilter').value
+            };
+            currentPage = 1;
+            loadVulnerabilities();
+        }
+
+        function clearFilters() {
+            document.getElementById('severityFilter').value = '';
+            document.getElementById('statusFilter').value = '';
+            document.getElementById('environmentFilter').value = '';
+            document.getElementById('sourceFilter').value = '';
+            currentFilters = {};
+            currentPage = 1;
+            loadVulnerabilities();
+        }
+
+        function exportCSV() {
+            ReportsAPI.exportCSV(currentFilters);
+        }
+
+        loadVulnerabilities();
+    </script>
+</body>
+</html>

@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Vulnerability Management System</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <header class="header">
+        <nav class="nav">
+            <a href="/dashboard" class="logo">🔒 VulnMS</a>
+            <ul class="nav-links">
+                <li><a href="/dashboard">Dashboard</a></li>
+                <li><a href="/vulnerabilities">Vulnerabilities</a></li>
+                <li><a href="/reports">Reports</a></li>
+                <li><a href="/import">Import</a></li>
+            </ul>
+            <div class="user-menu">
+                <span class="user-info" id="userInfo"></span>
+                <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
+            </div>
+        </nav>
+    </header>
+
+    <div class="container">
+        <h1 style="color: var(--accent-gold); margin-bottom: 2rem;">Vulnerability Dashboard</h1>
+
+        <!-- Stats Grid -->
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card">
+                <div class="stat-label">Total Vulnerabilities</div>
+                <div class="stat-value" id="totalVulns">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Open</div>
+                <div class="stat-value" id="openVulns">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Critical & High</div>
+                <div class="stat-value" id="criticalHighVulns">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Resolved</div>
+                <div class="stat-value" id="resolvedVulns">-</div>
+                <div class="stat-change" id="resolvedChange"></div>
+            </div>
+        </div>
+
+        <!-- Charts Section -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">By Severity</h2>
+                </div>
+                <div id="severityChart"></div>
+            </div>
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">By Environment</h2>
+                </div>
+                <div id="environmentChart"></div>
+            </div>
+        </div>
+
+        <!-- Recent Vulnerabilities -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Recent Vulnerabilities</h2>
+                <a href="/vulnerabilities" class="btn btn-secondary btn-sm">View All</a>
+            </div>
+            <div class="table-container">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>CVE/ID</th>
+                            <th>Title</th>
+                            <th>Severity</th>
+                            <th>Status</th>
+                            <th>Environment</th>
+                            <th>Date Found</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recentVulnsTable">
+                        <tr><td colspan="6" style="text-align: center;">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script>
+        // Check authentication
+        if (!requireAuth()) {
+            throw new Error('Not authenticated');
+        }
+
+        // Display user info
+        const user = getUser();
+        if (user) {
+            document.getElementById('userInfo').textContent = `${user.full_name || user.username} (${user.role})`;
+        }
+
+        // Load dashboard data
+        async function loadDashboard() {
+            try {
+                // Load stats
+                const stats = await VulnerabilityAPI.getStats();
+
+                document.getElementById('totalVulns').textContent = stats.total || 0;
+                document.getElementById('openVulns').textContent = stats.by_status?.open || 0;
+
+                const critical = stats.by_severity?.Critical || 0;
+                const high = stats.by_severity?.High || 0;
+                document.getElementById('criticalHighVulns').textContent = critical + high;
+
+                document.getElementById('resolvedVulns').textContent = stats.resolved_count || 0;
+
+                // Display severity breakdown
+                displaySeverityChart(stats.by_severity || {});
+
+                // Display environment breakdown
+                displayEnvironmentChart(stats.by_environment || {});
+
+                // Load recent vulnerabilities
+                const recentData = await VulnerabilityAPI.list({ per_page: 10, sort_by: 'date_found', sort_order: 'desc' });
+                displayRecentVulnerabilities(recentData.vulnerabilities || []);
+
+            } catch (error) {
+                console.error('Error loading dashboard:', error);
+                showAlert('Error loading dashboard data', 'error');
+            }
+        }
+
+        function displaySeverityChart(data) {
+            const chart = document.getElementById('severityChart');
+            const total = Object.values(data).reduce((a, b) => a + b, 0);
+
+            if (total === 0) {
+                chart.innerHTML = '<p style="text-align: center; color: var(--text-secondary);">No data available</p>';
+                return;
+            }
+
+            let html = '<div style="padding: 1rem;">';
+            const severities = ['Critical', 'High', 'Medium', 'Low', 'Informational'];
+
+            severities.forEach(severity => {
+                const count = data[severity] || 0;
+                const percentage = total > 0 ? (count / total * 100).toFixed(1) : 0;
+                const badgeClass = getSeverityBadgeClass(severity);
+
+                html += `
+                    <div style="margin-bottom: 1rem;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                            <span><span class="badge ${badgeClass}">${severity}</span></span>
+                            <span>${count} (${percentage}%)</span>
+                        </div>
+                        <div style="background: var(--bg-light); height: 8px; border-radius: 4px; overflow: hidden;">
+                            <div style="background: var(--${severity.toLowerCase() === 'critical' ? 'critical' : severity.toLowerCase() === 'high' ? 'high' : severity.toLowerCase() === 'medium' ? 'medium' : 'low'}); height: 100%; width: ${percentage}%;"></div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+            chart.innerHTML = html;
+        }
+
+        function displayEnvironmentChart(data) {
+            const chart = document.getElementById('environmentChart');
+            const total = Object.values(data).reduce((a, b) => a + b, 0);
+
+            if (total === 0) {
+                chart.innerHTML = '<p style="text-align: center; color: var(--text-secondary);">No data available</p>';
+                return;
+            }
+
+            let html = '<div style="padding: 1rem;">';
+            const environments = ['Production', 'Stage', 'Test', 'Dev', 'Unknown'];
+
+            environments.forEach(env => {
+                const count = data[env] || 0;
+                const percentage = total > 0 ? (count / total * 100).toFixed(1) : 0;
+
+                html += `
+                    <div style="margin-bottom: 1rem;">
+                        <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                            <span><strong>${env}</strong></span>
+                            <span>${count} (${percentage}%)</span>
+                        </div>
+                        <div style="background: var(--bg-light); height: 8px; border-radius: 4px; overflow: hidden;">
+                            <div style="background: var(--accent-blue); height: 100%; width: ${percentage}%;"></div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += '</div>';
+            chart.innerHTML = html;
+        }
+
+        function displayRecentVulnerabilities(vulnerabilities) {
+            const tbody = document.getElementById('recentVulnsTable');
+
+            if (vulnerabilities.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">No vulnerabilities found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = vulnerabilities.map(vuln => `
+                <tr>
+                    <td><strong>${vuln.cve_id || vuln.source_id || 'N/A'}</strong></td>
+                    <td>${vuln.title}</td>
+                    <td><span class="badge ${getSeverityBadgeClass(vuln.severity)}">${vuln.severity}</span></td>
+                    <td><span class="badge ${getStatusBadgeClass(vuln.status)}">${vuln.status}</span></td>
+                    <td>${vuln.environment || 'Unknown'}</td>
+                    <td>${formatDate(vuln.date_found)}</td>
+                </tr>
+            `).join('');
+        }
+
+        // Load dashboard on page load
+        loadDashboard();
+
+        // Refresh every 5 minutes
+        setInterval(loadDashboard, 5 * 60 * 1000);
+    </script>
+</body>
+</html>

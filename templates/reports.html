@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reports - VulnMS</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <header class="header">
+        <nav class="nav">
+            <a href="/dashboard" class="logo">🔒 VulnMS</a>
+            <ul class="nav-links">
+                <li><a href="/dashboard">Dashboard</a></li>
+                <li><a href="/vulnerabilities">Vulnerabilities</a></li>
+                <li><a href="/reports">Reports</a></li>
+                <li><a href="/import">Import</a></li>
+            </ul>
+            <div class="user-menu">
+                <span class="user-info" id="userInfo"></span>
+                <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
+            </div>
+        </nav>
+    </header>
+
+    <div class="container">
+        <h1 style="color: var(--accent-gold); margin-bottom: 2rem;">Reports & Analytics</h1>
+
+        <!-- CIO Executive Summary -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Executive Summary</h2>
+                <button class="btn btn-secondary btn-sm" onclick="loadCIOReport()">Refresh</button>
+            </div>
+            <div id="cioReport">Loading...</div>
+        </div>
+
+        <!-- Summary Statistics -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Detailed Summary</h2>
+            </div>
+            <div id="summaryReport">Loading...</div>
+        </div>
+
+        <!-- Aging Report -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Vulnerability Aging</h2>
+            </div>
+            <div id="agingReport">Loading...</div>
+        </div>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script>
+        requireAuth();
+        const user = getUser();
+        if (user) {
+            document.getElementById('userInfo').textContent = `${user.full_name || user.username}`;
+        }
+
+        async function loadCIOReport() {
+            try {
+                const data = await ReportsAPI.getCIOReport();
+                const container = document.getElementById('cioReport');
+
+                container.innerHTML = `
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; padding: 1rem;">
+                        <div>
+                            <h4>Total Vulnerabilities</h4>
+                            <div style="font-size: 2rem; font-weight: bold;">${data.executive_summary.total_vulnerabilities}</div>
+                        </div>
+                        <div>
+                            <h4>Open</h4>
+                            <div style="font-size: 2rem; font-weight: bold; color: var(--critical);">${data.executive_summary.open}</div>
+                        </div>
+                        <div>
+                            <h4>Resolved</h4>
+                            <div style="font-size: 2rem; font-weight: bold; color: var(--low);">${data.executive_summary.resolved}</div>
+                        </div>
+                        <div>
+                            <h4>Resolution Rate</h4>
+                            <div style="font-size: 2rem; font-weight: bold;">${data.executive_summary.resolution_rate}%</div>
+                        </div>
+                    </div>
+                    <hr>
+                    <div style="padding: 1rem;">
+                        <h4>Critical & High Priority</h4>
+                        <p>Critical Open: <strong>${data.critical_high.critical_open}</strong> | High Open: <strong>${data.critical_high.high_open}</strong></p>
+                        <p>Production Critical: <strong>${data.critical_high.production_critical}</strong> | Production High: <strong>${data.critical_high.production_high}</strong></p>
+                    </div>
+                `;
+            } catch (error) {
+                console.error('Error loading CIO report:', error);
+            }
+        }
+
+        async function loadSummary() {
+            try {
+                const data = await ReportsAPI.getSummary();
+                const container = document.getElementById('summaryReport');
+
+                let html = '<div style="padding: 1rem;">';
+                html += '<h4>By Severity</h4><ul>';
+                Object.entries(data.severity_breakdown).forEach(([sev, count]) => {
+                    html += `<li><span class="badge ${getSeverityBadgeClass(sev)}">${sev}</span>: ${count}</li>`;
+                });
+                html += '</ul>';
+
+                html += '<h4>By Status</h4><ul>';
+                Object.entries(data.status_breakdown).forEach(([status, count]) => {
+                    html += `<li><span class="badge ${getStatusBadgeClass(status)}">${status}</span>: ${count}</li>`;
+                });
+                html += '</ul></div>';
+
+                container.innerHTML = html;
+            } catch (error) {
+                console.error('Error loading summary:', error);
+            }
+        }
+
+        async function loadAgingReport() {
+            try {
+                const data = await ReportsAPI.getAging();
+                const container = document.getElementById('agingReport');
+
+                let html = '<div style="padding: 1rem;"><h4>Open Vulnerabilities by Age</h4><ul>';
+                Object.entries(data.age_distribution).forEach(([age, count]) => {
+                    html += `<li><strong>${age}</strong>: ${count}</li>`;
+                });
+                html += `</ul><p>Total Open: ${data.total_open}</p></div>`;
+
+                container.innerHTML = html;
+            } catch (error) {
+                console.error('Error loading aging report:', error);
+            }
+        }
+
+        loadCIOReport();
+        loadSummary();
+        loadAgingReport();
+    </script>
+</body>
+</html>
