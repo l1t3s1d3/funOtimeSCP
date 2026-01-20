@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Import - VulnMS</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <header class="header">
+        <nav class="nav">
+            <a href="/dashboard" class="logo">🔒 VulnMS</a>
+            <ul class="nav-links">
+                <li><a href="/dashboard">Dashboard</a></li>
+                <li><a href="/vulnerabilities">Vulnerabilities</a></li>
+                <li><a href="/reports">Reports</a></li>
+                <li><a href="/import">Import</a></li>
+            </ul>
+            <div class="user-menu">
+                <span class="user-info" id="userInfo"></span>
+                <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
+            </div>
+        </nav>
+    </header>
+
+    <div class="container">
+        <h1 style="color: var(--accent-gold); margin-bottom: 2rem;">Import Vulnerabilities</h1>
+
+        <div id="alertContainer"></div>
+
+        <!-- Import Forms -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
+            <!-- Wiz -->
+            <div class="card">
+                <h3 class="card-title">Wiz</h3>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Upload Wiz vulnerability CSV export</p>
+                <form id="wizForm">
+                    <div class="form-group">
+                        <input type="file" id="wizFile" accept=".csv" class="form-input" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">Import Wiz Data</button>
+                </form>
+            </div>
+
+            <!-- Veracode -->
+            <div class="card">
+                <h3 class="card-title">Veracode</h3>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Upload Veracode XML detailed report</p>
+                <form id="veracodeForm">
+                    <div class="form-group">
+                        <input type="file" id="veracodeFile" accept=".xml" class="form-input" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">Import Veracode Data</button>
+                </form>
+            </div>
+
+            <!-- Arctic Wolf -->
+            <div class="card">
+                <h3 class="card-title">Arctic Wolf</h3>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Upload Arctic Wolf CSV export</p>
+                <form id="arcticWolfForm">
+                    <div class="form-group">
+                        <input type="file" id="arcticWolfFile" accept=".csv" class="form-input" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%;">Import Arctic Wolf Data</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Import History -->
+        <div class="card" style="margin-top: 2rem;">
+            <div class="card-header">
+                <h3 class="card-title">Import History</h3>
+            </div>
+            <div class="table-container">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Source</th>
+                            <th>Last Sync</th>
+                            <th>Status</th>
+                            <th>Imported</th>
+                            <th>Updated</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyTableBody">
+                        <tr><td colspan="5" style="text-align: center;">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script>
+        requireAuth();
+        const user = getUser();
+        if (user) {
+            document.getElementById('userInfo').textContent = `${user.full_name || user.username}`;
+        }
+
+        function showImportAlert(message, type) {
+            const container = document.getElementById('alertContainer');
+            container.innerHTML = `<div class="alert alert-${type}">${message}</div>`;
+            setTimeout(() => {
+                container.innerHTML = '';
+            }, 5000);
+        }
+
+        document.getElementById('wizForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const file = document.getElementById('wizFile').files[0];
+            await importFile('wiz', file);
+        });
+
+        document.getElementById('veracodeForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const file = document.getElementById('veracodeFile').files[0];
+            await importFile('veracode', file);
+        });
+
+        document.getElementById('arcticWolfForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const file = document.getElementById('arcticWolfFile').files[0];
+            await importFile('arctic-wolf', file);
+        });
+
+        async function importFile(source, file) {
+            try {
+                showImportAlert(`Importing ${source} data...`, 'info');
+                const result = await ImportAPI.importFile(source, file);
+
+                if (result.error) {
+                    showImportAlert(`Error: ${result.error}`, 'error');
+                } else {
+                    showImportAlert(
+                        `Success! Imported: ${result.imported}, Updated: ${result.updated}`,
+                        'success'
+                    );
+                    loadHistory();
+                }
+            } catch (error) {
+                showImportAlert(`Import failed: ${error.message}`, 'error');
+            }
+        }
+
+        async function loadHistory() {
+            try {
+                const sources = await ImportAPI.listSources();
+                const tbody = document.getElementById('historyTableBody');
+
+                if (sources.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center;">No import history</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = sources.map(s => `
+                    <tr>
+                        <td><strong>${s.name}</strong></td>
+                        <td>${formatDate(s.last_sync_at) || 'Never'}</td>
+                        <td><span class="badge ${s.last_sync_status === 'success' ? 'badge-resolved' : 'badge-open'}">${s.last_sync_status || 'N/A'}</span></td>
+                        <td>${s.vulnerabilities_imported || 0}</td>
+                        <td>${s.vulnerabilities_updated || 0}</td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('Error loading history:', error);
+            }
+        }
+
+        loadHistory();
+    </script>
+</body>
+</html>

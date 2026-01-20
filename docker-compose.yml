@@ -1,16 +1,27 @@
 version: '3.8'
 
 services:
-  workout-tracker:
+  vuln-management:
     build: .
     ports:
       - "5000:5000"
     volumes:
-      - workout-data:/app/data
+      - vuln-data:/app/data
+      - vuln-uploads:/app/uploads
     environment:
       - FLASK_APP=app.py
+      - FLASK_ENV=production
       - PYTHONUNBUFFERED=1
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-me-in-production}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - JIRA_URL=${JIRA_URL:-}
+      - JIRA_EMAIL=${JIRA_EMAIL:-}
+      - JIRA_API_TOKEN=${JIRA_API_TOKEN:-}
+      - JIRA_PROJECT_KEY=${JIRA_PROJECT_KEY:-VULN}
     restart: unless-stopped
 
 volumes:
-  workout-data:
+  vuln-data:
+  vuln-uploads:
