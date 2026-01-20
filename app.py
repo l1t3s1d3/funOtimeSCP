@@ -28,8 +28,13 @@ def create_app():
     app.config['JWT_REFRESH_TOKEN_EXPIRES'] = timedelta(days=30)
 
     # Database configuration
-    data_dir = os.getenv('DATA_DIR', 'data')
-    os.makedirs(data_dir, exist_ok=True)
+    data_dir = os.path.abspath(os.getenv('DATA_DIR', 'data'))
+    try:
+        os.makedirs(data_dir, mode=0o755, exist_ok=True)
+    except Exception as e:
+        print(f"Warning: Could not create data directory: {e}")
+        print(f"Using current directory for database")
+        data_dir = os.getcwd()
 
     database_url = os.getenv('DATABASE_URL', f'sqlite:///{data_dir}/vulnerabilities.db')
     app.config['SQLALCHEMY_DATABASE_URI'] = database_url
@@ -37,8 +42,12 @@ def create_app():
 
     # File upload configuration
     app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max upload
-    app.config['UPLOAD_FOLDER'] = 'uploads'
-    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+    upload_folder = os.path.abspath('uploads')
+    try:
+        os.makedirs(upload_folder, mode=0o755, exist_ok=True)
+    except Exception as e:
+        print(f"Warning: Could not create upload directory: {e}")
+    app.config['UPLOAD_FOLDER'] = upload_folder
 
     # Initialize extensions
     init_extensions(app)
