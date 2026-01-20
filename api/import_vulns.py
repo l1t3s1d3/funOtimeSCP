@@ -1,13 +1,13 @@
-"""Vulnerability import API endpoints"""
+"""Vulnerability import API endpoints with comprehensive tracking"""
 import os
 from datetime import datetime
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from werkzeug.utils import secure_filename
 from extensions import db
-from models import Vulnerability, VulnerabilitySource
+from models import ImportLog, ImportError
 from parsers import WizParser, VeracodeParser, ArcticWolfParser
-from utils.history_tracker import create_initial_history
+from utils.import_service import ImportService
 
 import_bp = Blueprint('import', __name__, url_prefix='/api/import')
 
@@ -18,6 +18,73 @@ ALLOWED_EXTENSIONS = {'csv', 'xml', 'json'}
 def allowed_file(filename):
     """Check if file extension is allowed"""
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+def process_import(source_name: str, parser, file, current_user: str):
+    """
+    Generic import processing with comprehensive tracking
+
+    Returns: (result_dict, status_code)
+    """
+    import_log = None
+    filepath = None
+
+    try:
+        # Save file
+        filename = secure_filename(file.filename)
+        filepath = os.path.join(UPLOAD_FOLDER, filename)
+        file.save(filepath)
+        file_size = os.path.getsize(filepath)
+
+        # Start import tracking
+        import_log = ImportService.start_import(source_name, filename, file_size, current_user)
+
+        # Parse file based on type
+        if filepath.endswith('.csv'):
+            parsed_data, columns_found, errors, warnings = parser.parse_csv_with_tracking(filepath)
+        elif filepath.endswith('.xml'):
+            parsed_data, columns_found, errors, warnings = parser.parse_xml_with_tracking(filepath)
+        else:
+            raise ValueError("Unsupported file type")
+
+        # Complete import with tracking
+        result = ImportService.complete_import(
+            import_log,
+            parsed_data,
+            columns_found,
+            errors,
+            warnings,
+            current_user
+        )
+
+        # Clean up file
+        if filepath and os.path.exists(filepath):
+            os.remove(filepath)
+
+        return {
+            'message': f'{source_name} vulnerabilities imported successfully',
+            'import_log_id': result['import_log_id'],
+            'imported': result['imported'],
+            'updated': result['updated'],
+            'duplicates': result['duplicates'],
+            'errors': result['errors'],
+            'total': result['total'],
+            'status': import_log.status
+        }, 200
+
+    except Exception as e:
+        # Mark import as failed
+        if import_log:
+            ImportService.fail_import(import_log, str(e))
+
+        # Clean up file
+        if filepath and os.path.exists(filepath):
+            os.remove(filepath)
+
+        return {
+            'error': f'Import failed: {str(e)}',
+            'import_log_id': import_log.id if import_log else None
+        }, 500
 
 
 @import_bp.route('/wiz', methods=['POST'])
@@ -37,82 +104,8 @@ def import_wiz():
     if not allowed_file(file.filename):
         return jsonify({'error': 'Invalid file type. Only CSV, XML, and JSON files are allowed'}), 400
 
-    try:
-        # Save file
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(UPLOAD_FOLDER, filename)
-        file.save(filepath)
-
-        # Parse file
-        parser = WizParser()
-        vulnerabilities_data = parser.parse_csv(filepath)
-
-        # Import vulnerabilities
-        imported_count = 0
-        updated_count = 0
-
-        for vuln_data in vulnerabilities_data:
-            # Check if vulnerability already exists
-            existing_vuln = Vulnerability.query.filter_by(
-                source='Wiz',
-                source_id=vuln_data['source_id']
-            ).first()
-
-            if existing_vuln:
-                # Update existing vulnerability
-                for key, value in vuln_data.items():
-                    if key not in ['source', 'source_id'] and value is not None:
-                        setattr(existing_vuln, key, value)
-                existing_vuln.updated_at = datetime.utcnow()
-                existing_vuln.updated_by = current_user
-                updated_count += 1
-            else:
-                # Create new vulnerability
-                vuln = Vulnerability(**vuln_data)
-                vuln.created_by = current_user
-                vuln.updated_by = current_user
-                db.session.add(vuln)
-                db.session.flush()  # Get the ID
-                create_initial_history(vuln, current_user)
-                imported_count += 1
-
-        # Update source status
-        source = VulnerabilitySource.query.filter_by(name='Wiz').first()
-        if not source:
-            source = VulnerabilitySource(name='Wiz', sync_type='csv')
-            db.session.add(source)
-
-        source.last_sync_at = datetime.utcnow()
-        source.last_sync_status = 'success'
-        source.vulnerabilities_imported = imported_count
-        source.vulnerabilities_updated = updated_count
-
-        db.session.commit()
-
-        # Clean up file
-        os.remove(filepath)
-
-        return jsonify({
-            'message': 'Wiz vulnerabilities imported successfully',
-            'imported': imported_count,
-            'updated': updated_count,
-            'total': len(vulnerabilities_data)
-        }), 200
-
-    except Exception as e:
-        db.session.rollback()
-        if os.path.exists(filepath):
-            os.remove(filepath)
-
-        # Update source status
-        source = VulnerabilitySource.query.filter_by(name='Wiz').first()
-        if source:
-            source.last_sync_at = datetime.utcnow()
-            source.last_sync_status = 'failed'
-            source.last_sync_error = str(e)
-            db.session.commit()
-
-        return jsonify({'error': f'Import failed: {str(e)}'}), 500
+    result, status_code = process_import('Wiz', WizParser, file, current_user)
+    return jsonify(result), status_code
 
 
 @import_bp.route('/veracode', methods=['POST'])
@@ -132,82 +125,8 @@ def import_veracode():
     if not allowed_file(file.filename):
         return jsonify({'error': 'Invalid file type. Only CSV, XML, and JSON files are allowed'}), 400
 
-    try:
-        # Save file
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(UPLOAD_FOLDER, filename)
-        file.save(filepath)
-
-        # Parse file
-        parser = VeracodeParser()
-        vulnerabilities_data = parser.parse_xml(filepath)
-
-        # Import vulnerabilities
-        imported_count = 0
-        updated_count = 0
-
-        for vuln_data in vulnerabilities_data:
-            # Check if vulnerability already exists
-            existing_vuln = Vulnerability.query.filter_by(
-                source='Veracode',
-                source_id=vuln_data['source_id']
-            ).first()
-
-            if existing_vuln:
-                # Update existing vulnerability
-                for key, value in vuln_data.items():
-                    if key not in ['source', 'source_id'] and value is not None:
-                        setattr(existing_vuln, key, value)
-                existing_vuln.updated_at = datetime.utcnow()
-                existing_vuln.updated_by = current_user
-                updated_count += 1
-            else:
-                # Create new vulnerability
-                vuln = Vulnerability(**vuln_data)
-                vuln.created_by = current_user
-                vuln.updated_by = current_user
-                db.session.add(vuln)
-                db.session.flush()  # Get the ID
-                create_initial_history(vuln, current_user)
-                imported_count += 1
-
-        # Update source status
-        source = VulnerabilitySource.query.filter_by(name='Veracode').first()
-        if not source:
-            source = VulnerabilitySource(name='Veracode', sync_type='csv')
-            db.session.add(source)
-
-        source.last_sync_at = datetime.utcnow()
-        source.last_sync_status = 'success'
-        source.vulnerabilities_imported = imported_count
-        source.vulnerabilities_updated = updated_count
-
-        db.session.commit()
-
-        # Clean up file
-        os.remove(filepath)
-
-        return jsonify({
-            'message': 'Veracode vulnerabilities imported successfully',
-            'imported': imported_count,
-            'updated': updated_count,
-            'total': len(vulnerabilities_data)
-        }), 200
-
-    except Exception as e:
-        db.session.rollback()
-        if os.path.exists(filepath):
-            os.remove(filepath)
-
-        # Update source status
-        source = VulnerabilitySource.query.filter_by(name='Veracode').first()
-        if source:
-            source.last_sync_at = datetime.utcnow()
-            source.last_sync_status = 'failed'
-            source.last_sync_error = str(e)
-            db.session.commit()
-
-        return jsonify({'error': f'Import failed: {str(e)}'}), 500
+    result, status_code = process_import('Veracode', VeracodeParser, file, current_user)
+    return jsonify(result), status_code
 
 
 @import_bp.route('/arctic-wolf', methods=['POST'])
@@ -227,87 +146,112 @@ def import_arctic_wolf():
     if not allowed_file(file.filename):
         return jsonify({'error': 'Invalid file type. Only CSV, XML, and JSON files are allowed'}), 400
 
-    try:
-        # Save file
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(UPLOAD_FOLDER, filename)
-        file.save(filepath)
+    result, status_code = process_import('Arctic Wolf', ArcticWolfParser, file, current_user)
+    return jsonify(result), status_code
 
-        # Parse file
-        parser = ArcticWolfParser()
-        vulnerabilities_data = parser.parse_csv(filepath)
 
-        # Import vulnerabilities
-        imported_count = 0
-        updated_count = 0
+@import_bp.route('/logs', methods=['GET'])
+@jwt_required()
+def list_import_logs():
+    """List all import logs with filtering"""
+    # Get filter parameters
+    filters = {}
+    if request.args.get('source'):
+        filters['source'] = request.args.get('source')
+    if request.args.get('status'):
+        filters['status'] = request.args.get('status')
+    if request.args.get('imported_by'):
+        filters['imported_by'] = request.args.get('imported_by')
+    if request.args.get('start_date'):
+        filters['start_date'] = request.args.get('start_date')
+    if request.args.get('end_date'):
+        filters['end_date'] = request.args.get('end_date')
 
-        for vuln_data in vulnerabilities_data:
-            # Check if vulnerability already exists
-            existing_vuln = Vulnerability.query.filter_by(
-                source='Arctic Wolf',
-                source_id=vuln_data['source_id']
-            ).first()
+    page = request.args.get('page', 1, type=int)
+    per_page = min(request.args.get('per_page', 50, type=int), 200)
 
-            if existing_vuln:
-                # Update existing vulnerability
-                for key, value in vuln_data.items():
-                    if key not in ['source', 'source_id'] and value is not None:
-                        setattr(existing_vuln, key, value)
-                existing_vuln.updated_at = datetime.utcnow()
-                existing_vuln.updated_by = current_user
-                updated_count += 1
-            else:
-                # Create new vulnerability
-                vuln = Vulnerability(**vuln_data)
-                vuln.created_by = current_user
-                vuln.updated_by = current_user
-                db.session.add(vuln)
-                db.session.flush()  # Get the ID
-                create_initial_history(vuln, current_user)
-                imported_count += 1
+    result = ImportService.get_import_logs(filters, page, per_page)
+    return jsonify(result), 200
 
-        # Update source status
-        source = VulnerabilitySource.query.filter_by(name='Arctic Wolf').first()
-        if not source:
-            source = VulnerabilitySource(name='Arctic Wolf', sync_type='csv')
-            db.session.add(source)
 
-        source.last_sync_at = datetime.utcnow()
-        source.last_sync_status = 'success'
-        source.vulnerabilities_imported = imported_count
-        source.vulnerabilities_updated = updated_count
+@import_bp.route('/logs/<int:log_id>', methods=['GET'])
+@jwt_required()
+def get_import_log(log_id):
+    """Get detailed information about a specific import"""
+    import_log = ImportLog.query.get_or_404(log_id)
+    return jsonify(import_log.to_dict()), 200
 
-        db.session.commit()
 
-        # Clean up file
-        os.remove(filepath)
+@import_bp.route('/logs/<int:log_id>/errors', methods=['GET'])
+@jwt_required()
+def get_import_errors(log_id):
+    """Get detailed errors for a specific import"""
+    page = request.args.get('page', 1, type=int)
+    per_page = min(request.args.get('per_page', 100, type=int), 500)
 
-        return jsonify({
-            'message': 'Arctic Wolf vulnerabilities imported successfully',
-            'imported': imported_count,
-            'updated': updated_count,
-            'total': len(vulnerabilities_data)
-        }), 200
-
-    except Exception as e:
-        db.session.rollback()
-        if os.path.exists(filepath):
-            os.remove(filepath)
-
-        # Update source status
-        source = VulnerabilitySource.query.filter_by(name='Arctic Wolf').first()
-        if source:
-            source.last_sync_at = datetime.utcnow()
-            source.last_sync_status = 'failed'
-            source.last_sync_error = str(e)
-            db.session.commit()
-
-        return jsonify({'error': f'Import failed: {str(e)}'}), 500
+    result = ImportService.get_import_errors(log_id, page, per_page)
+    return jsonify(result), 200
 
 
 @import_bp.route('/sources', methods=['GET'])
 @jwt_required()
 def list_sources():
     """List all vulnerability sources and their sync status"""
+    from models import VulnerabilitySource
     sources = VulnerabilitySource.query.all()
     return jsonify([source.to_dict() for source in sources]), 200
+
+
+@import_bp.route('/stats', methods=['GET'])
+@jwt_required()
+def get_import_stats():
+    """Get import statistics"""
+    from sqlalchemy import func
+
+    # Total imports
+    total_imports = ImportLog.query.count()
+
+    # Imports by status
+    status_counts = db.session.query(
+        ImportLog.status,
+        func.count(ImportLog.id)
+    ).group_by(ImportLog.status).all()
+
+    # Imports by source
+    source_counts = db.session.query(
+        ImportLog.source,
+        func.count(ImportLog.id)
+    ).group_by(ImportLog.source).all()
+
+    # Recent imports (last 10)
+    recent_imports = ImportLog.query.order_by(
+        ImportLog.started_at.desc()
+    ).limit(10).all()
+
+    # Total vulnerabilities imported
+    total_imported = db.session.query(
+        func.sum(ImportLog.rows_imported)
+    ).scalar() or 0
+
+    total_updated = db.session.query(
+        func.sum(ImportLog.rows_updated)
+    ).scalar() or 0
+
+    total_duplicates = db.session.query(
+        func.sum(ImportLog.rows_duplicates)
+    ).scalar() or 0
+
+    total_errors = db.session.query(
+        func.sum(ImportLog.rows_errors)
+    ).scalar() or 0
+
+    return jsonify({
+        'total_imports': total_imports,
+        'by_status': {status: count for status, count in status_counts},
+        'by_source': {source: count for source, count in source_counts},
+        'recent_imports': [log.to_dict() for log in recent_imports],
+        'total_vulnerabilities_imported': total_imported,
+        'total_vulnerabilities_updated': total_updated,
+        'total_duplicates': total_duplicates,
+        'total_errors': total_errors
+    }), 200

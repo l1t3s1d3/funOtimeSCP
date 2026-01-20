@@ -94,6 +94,42 @@ class ArcticWolfParser:
         return vulnerabilities
 
     @staticmethod
+    def parse_csv_with_tracking(file_path: str):
+        """
+        Parse Arctic Wolf CSV with detailed tracking for import service
+        Returns: (vulnerabilities, columns_found, errors, warnings)
+        """
+        vulnerabilities = []
+        errors_list = []
+        warnings_list = []
+        col_map = {}
+
+        try:
+            df = pd.read_csv(file_path)
+
+            # Get column mappings
+            col_map = ArcticWolfParser._get_column_mappings(df.columns.tolist())
+
+            # Warn about missing critical columns
+            if 'id' not in col_map:
+                warnings_list.append("No ID column found. Generated IDs will be used.")
+            if 'title' not in col_map:
+                warnings_list.append("No title/name column found. Generic titles will be used.")
+
+            for idx, row in df.iterrows():
+                try:
+                    vuln = ArcticWolfParser._parse_arctic_wolf_row(row, col_map, idx)
+                    if vuln:
+                        vulnerabilities.append(vuln)
+                except Exception as e:
+                    errors_list.append((idx, 'parsing', str(e)))
+
+        except Exception as e:
+            raise ValueError(f"Error parsing Arctic Wolf CSV: {str(e)}")
+
+        return vulnerabilities, col_map, errors_list, warnings_list
+
+    @staticmethod
     def _parse_arctic_wolf_row(row, col_map: Dict[str, str], row_idx: int) -> Dict[str, Any]:
         """Parse a single Arctic Wolf row into vulnerability dictionary"""
         try:

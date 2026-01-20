@@ -59,6 +59,51 @@ class VeracodeParser:
         return vulnerabilities
 
     @staticmethod
+    def parse_xml_with_tracking(file_path: str):
+        """
+        Parse Veracode XML with detailed tracking for import service
+        Returns: (vulnerabilities, columns_found, errors, warnings)
+        """
+        vulnerabilities = []
+        errors_list = []
+        warnings_list = []
+
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                xml_content = f.read()
+
+            doc = xmltodict.parse(xml_content)
+            detailed_report = doc.get('detailedreport', {})
+            static_analysis = detailed_report.get('static-analysis', {})
+
+            modules = static_analysis.get('modules', {}).get('module', [])
+            if not isinstance(modules, list):
+                modules = [modules] if modules else []
+
+            for module in modules:
+                module_name = module.get('@name', 'Unknown Module')
+                module_flaws = module.get('issues', {}).get('issue', [])
+
+                if not isinstance(module_flaws, list):
+                    module_flaws = [module_flaws] if module_flaws else []
+
+                for idx, flaw in enumerate(module_flaws):
+                    try:
+                        vuln = VeracodeParser._parse_veracode_flaw(flaw, module_name, detailed_report)
+                        if vuln:
+                            vulnerabilities.append(vuln)
+                    except Exception as e:
+                        errors_list.append((idx, 'parsing', str(e)))
+
+        except Exception as e:
+            raise ValueError(f"Error parsing Veracode XML: {str(e)}")
+
+        # Column mappings not applicable for XML, return empty dict
+        col_map = {'format': 'XML (Veracode Detailed Report)'}
+
+        return vulnerabilities, col_map, errors_list, warnings_list
+
+    @staticmethod
     def _parse_veracode_flaw(flaw: Dict, module_name: str, report: Dict) -> Dict[str, Any]:
         """Parse a single Veracode flaw into vulnerability dictionary"""
         try:
