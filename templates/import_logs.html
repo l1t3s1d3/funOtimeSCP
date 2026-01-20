@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Import Logs - VulnMS</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <header class="header">
+        <nav class="nav">
+            <a href="/dashboard" class="logo">🔒 VulnMS</a>
+            <ul class="nav-links">
+                <li><a href="/dashboard">Dashboard</a></li>
+                <li><a href="/vulnerabilities">Vulnerabilities</a></li>
+                <li><a href="/reports">Reports</a></li>
+                <li><a href="/import">Import</a></li>
+                <li><a href="/import-logs">Import Logs</a></li>
+            </ul>
+            <div class="user-menu">
+                <span class="user-info" id="userInfo"></span>
+                <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
+            </div>
+        </nav>
+    </header>
+
+    <div class="container">
+        <h1 style="color: var(--accent-gold); margin-bottom: 2rem;">Import Logs & Review</h1>
+
+        <!-- Statistics -->
+        <div class="stats-grid" id="stats-grid">
+            <div class="stat-card">
+                <div class="stat-label">Total Imports</div>
+                <div class="stat-value" id="totalImports">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Successful</div>
+                <div class="stat-value" id="successfulImports">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Total Imported</div>
+                <div class="stat-value" id="totalVulns">-</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Duplicates Detected</div>
+                <div class="stat-value" id="totalDuplicates">-</div>
+            </div>
+        </div>
+
+        <!-- Filters -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Filter Import Logs</h3>
+                <button class="btn btn-secondary btn-sm" onclick="clearFilters()">Clear Filters</button>
+            </div>
+            <div class="filters">
+                <div class="form-group">
+                    <label for="filterSource" class="form-label">Source</label>
+                    <select id="filterSource" class="form-select">
+                        <option value="">All Sources</option>
+                        <option value="Wiz">Wiz</option>
+                        <option value="Veracode">Veracode</option>
+                        <option value="Arctic Wolf">Arctic Wolf</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="filterStatus" class="form-label">Status</label>
+                    <select id="filterStatus" class="form-select">
+                        <option value="">All Statuses</option>
+                        <option value="success">Success</option>
+                        <option value="partial-success">Partial Success</option>
+                        <option value="failed">Failed</option>
+                        <option value="in-progress">In Progress</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="filterStartDate" class="form-label">Start Date</label>
+                    <input type="date" id="filterStartDate" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label for="filterEndDate" class="form-label">End Date</label>
+                    <input type="date" id="filterEndDate" class="form-input">
+                </div>
+            </div>
+            <button class="btn btn-primary" onclick="applyFilters()">Apply Filters</button>
+        </div>
+
+        <!-- Import Logs Table -->
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title">Import History</h3>
+            </div>
+            <div class="table-container">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Source</th>
+                            <th>Filename</th>
+                            <th>Status</th>
+                            <th>Imported</th>
+                            <th>Updated</th>
+                            <th>Duplicates</th>
+                            <th>Errors</th>
+                            <th>Duration</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logsTableBody">
+                        <tr><td colspan="10" style="text-align: center;">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="pagination" id="pagination"></div>
+        </div>
+    </div>
+
+    <!-- Error Details Modal -->
+    <div id="errorModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Import Error Details</h2>
+                <button class="modal-close" onclick="closeErrorModal()">&times;</button>
+            </div>
+            <div id="errorModalBody"></div>
+        </div>
+    </div>
+
+    <!-- Import Details Modal -->
+    <div id="detailsModal" class="modal">
+        <div class="modal-content" style="max-width: 800px;">
+            <div class="modal-header">
+                <h2 class="modal-title">Import Details</h2>
+                <button class="modal-close" onclick="closeDetailsModal()">&times;</button>
+            </div>
+            <div id="detailsModalBody"></div>
+        </div>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script>
+        requireAuth();
+        const user = getUser();
+        if (user) {
+            document.getElementById('userInfo').textContent = `${user.full_name || user.username}`;
+        }
+
+        let currentPage = 1;
+        let currentFilters = {};
+
+        async function loadStats() {
+            try {
+                const response = await apiRequest('/import/stats');
+                const stats = await response.json();
+
+                document.getElementById('totalImports').textContent = stats.total_imports || 0;
+                document.getElementById('successfulImports').textContent = stats.by_status?.success || 0;
+                document.getElementById('totalVulns').textContent =
+                    (stats.total_vulnerabilities_imported || 0) + (stats.total_vulnerabilities_updated || 0);
+                document.getElementById('totalDuplicates').textContent = stats.total_duplicates || 0;
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+
+        async function loadImportLogs(page = 1) {
+            try {
+                showLoading('logsTableBody');
+
+                const params = new URLSearchParams({
+                    page: page,
+                    per_page: 20,
+                    ...currentFilters
+                });
+
+                const response = await apiRequest(`/import/logs?${params}`);
+                const data = await response.json();
+
+                displayLogs(data.logs);
+                displayPagination(data.page, data.pages);
+                currentPage = page;
+            } catch (error) {
+                console.error('Error loading import logs:', error);
+                document.getElementById('logsTableBody').innerHTML =
+                    '<tr><td colspan="10" style="text-align: center; color: var(--critical);">Error loading logs</td></tr>';
+            }
+        }
+
+        function displayLogs(logs) {
+            const tbody = document.getElementById('logsTableBody');
+
+            if (logs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="10" style="text-align: center;">No import logs found</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = logs.map(log => `
+                <tr>
+                    <td>${formatDate(log.started_at)}</td>
+                    <td><strong>${log.source}</strong></td>
+                    <td>${log.filename}</td>
+                    <td><span class="badge ${getStatusBadge(log.status)}">${log.status}</span></td>
+                    <td>${log.rows_imported || 0}</td>
+                    <td>${log.rows_updated || 0}</td>
+                    <td>${log.rows_duplicates || 0}</td>
+                    <td>${log.rows_errors || 0}</td>
+                    <td>${log.duration_seconds ? log.duration_seconds.toFixed(2) + 's' : 'N/A'}</td>
+                    <td>
+                        <button class="btn btn-secondary btn-sm" onclick="viewDetails(${log.id})">Details</button>
+                        ${log.rows_errors > 0 ? `<button class="btn btn-danger btn-sm" onclick="viewErrors(${log.id})">Errors</button>` : ''}
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function displayPagination(currentPage, totalPages) {
+            const pagination = document.getElementById('pagination');
+            if (totalPages <= 1) {
+                pagination.innerHTML = '';
+                return;
+            }
+
+            let html = '';
+            html += `<button onclick="loadImportLogs(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>Previous</button>`;
+
+            for (let i = Math.max(1, currentPage - 2); i <= Math.min(totalPages, currentPage + 2); i++) {
+                html += `<button onclick="loadImportLogs(${i})" class="${i === currentPage ? 'active' : ''}">${i}</button>`;
+            }
+
+            html += `<button onclick="loadImportLogs(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>Next</button>`;
+            pagination.innerHTML = html;
+        }
+
+        function getStatusBadge(status) {
+            const map = {
+                'success': 'badge-resolved',
+                'partial-success': 'badge-medium',
+                'failed': 'badge-open',
+                'in-progress': 'badge-in-progress'
+            };
+            return map[status] || 'badge-info';
+        }
+
+        async function viewDetails(logId) {
+            try {
+                const response = await apiRequest(`/import/logs/${logId}`);
+                const log = await response.json();
+
+                const detailsHtml = `
+                    <div style="padding: 1rem;">
+                        <table style="width: 100%; border-collapse: collapse;">
+                            <tr>
+                                <td style="padding: 0.5rem; font-weight: bold;">Source:</td>
+                                <td style="padding: 0.5rem;">${log.source}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0.5rem; font-weight: bold;">Filename:</td>
+                                <td style="padding: 0.5rem;">${log.filename}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0.5rem; font-weight: bold;">File Size:</td>
+                                <td style="padding: 0.5rem;">${(log.file_size / 1024).toFixed(2)} KB</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0.5rem; font-weight: bold;">Status:</td>
+                                <td style="padding: 0.5rem;"><span class="badge ${getStatusBadge(log.status)}">${log.status}</span></td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0.5rem; font-weight: bold;">Total Rows:</td>
+                                <td style="padding: 0.5rem;">${log.total_rows || 0}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0.5rem; font-weight: bold;">Successfully Imported:</td>
+                                <td style="padding: 0.5rem;">${log.rows_imported || 0}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0.5rem; font-weight: bold;">Updated:</td>
+                                <td style="padding: 0.5rem;">${log.rows_updated || 0}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0.5rem; font-weight: bold;">Duplicates:</td>
+                                <td style="padding: 0.5rem;">${log.rows_duplicates || 0}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0.5rem; font-weight: bold;">Errors:</td>
+                                <td style="padding: 0.5rem;">${log.rows_errors || 0}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0.5rem; font-weight: bold;">Started:</td>
+                                <td style="padding: 0.5rem;">${formatDate(log.started_at)}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0.5rem; font-weight: bold;">Completed:</td>
+                                <td style="padding: 0.5rem;">${log.completed_at ? formatDate(log.completed_at) : 'In Progress'}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0.5rem; font-weight: bold;">Duration:</td>
+                                <td style="padding: 0.5rem;">${log.duration_seconds ? log.duration_seconds.toFixed(2) + ' seconds' : 'N/A'}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding: 0.5rem; font-weight: bold;">Imported By:</td>
+                                <td style="padding: 0.5rem;">${log.imported_by}</td>
+                            </tr>
+                        </table>
+
+                        ${log.warnings && log.warnings.length > 0 ? `
+                            <div style="margin-top: 1rem;">
+                                <h4 style="color: var(--medium);">Warnings:</h4>
+                                <ul>
+                                    ${log.warnings.map(w => `<li>${w}</li>`).join('')}
+                                </ul>
+                            </div>
+                        ` : ''}
+
+                        ${log.columns_found && Object.keys(log.columns_found).length > 0 ? `
+                            <div style="margin-top: 1rem;">
+                                <h4 style="color: var(--accent-gold);">Columns Found:</h4>
+                                <pre style="background: var(--bg-dark); padding: 1rem; border-radius: 4px; overflow-x: auto;">${JSON.stringify(log.columns_found, null, 2)}</pre>
+                            </div>
+                        ` : ''}
+
+                        ${log.error_message ? `
+                            <div style="margin-top: 1rem;">
+                                <h4 style="color: var(--critical);">Error Message:</h4>
+                                <div class="alert alert-error">${log.error_message}</div>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+
+                document.getElementById('detailsModalBody').innerHTML = detailsHtml;
+                document.getElementById('detailsModal').classList.add('active');
+            } catch (error) {
+                console.error('Error loading import details:', error);
+                showAlert('Error loading import details', 'error');
+            }
+        }
+
+        async function viewErrors(logId) {
+            try {
+                const response = await apiRequest(`/import/logs/${logId}/errors`);
+                const data = await response.json();
+
+                if (data.errors.length === 0) {
+                    document.getElementById('errorModalBody').innerHTML = '<p>No errors found for this import.</p>';
+                } else {
+                    const errorsHtml = `
+                        <div style="padding: 1rem;">
+                            <p><strong>Total Errors: ${data.total}</strong></p>
+                            <div style="max-height: 400px; overflow-y: auto; margin-top: 1rem;">
+                                ${data.errors.map(error => `
+                                    <div class="card" style="margin-bottom: 1rem; background: var(--bg-dark);">
+                                        <div style="padding: 1rem;">
+                                            <div style="display: flex; justify-content: space-between; margin-bottom: 0.5rem;">
+                                                <span><strong>Row ${error.row_number}</strong></span>
+                                                <span class="badge badge-${error.error_type === 'duplicate' ? 'medium' : 'open'}">${error.error_type}</span>
+                                            </div>
+                                            <div style="color: var(--critical); margin-bottom: 0.5rem;">${error.error_message}</div>
+                                            ${error.row_data && Object.keys(error.row_data).length > 0 ? `
+                                                <details>
+                                                    <summary style="cursor: pointer; color: var(--accent-blue);">View Row Data</summary>
+                                                    <pre style="background: var(--bg-medium); padding: 0.5rem; border-radius: 4px; margin-top: 0.5rem; overflow-x: auto;">${JSON.stringify(error.row_data, null, 2)}</pre>
+                                                </details>
+                                            ` : ''}
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `;
+
+                    document.getElementById('errorModalBody').innerHTML = errorsHtml;
+                }
+
+                document.getElementById('errorModal').classList.add('active');
+            } catch (error) {
+                console.error('Error loading import errors:', error);
+                showAlert('Error loading import errors', 'error');
+            }
+        }
+
+        function closeErrorModal() {
+            document.getElementById('errorModal').classList.remove('active');
+        }
+
+        function closeDetailsModal() {
+            document.getElementById('detailsModal').classList.remove('active');
+        }
+
+        function applyFilters() {
+            currentFilters = {};
+
+            const source = document.getElementById('filterSource').value;
+            if (source) currentFilters.source = source;
+
+            const status = document.getElementById('filterStatus').value;
+            if (status) currentFilters.status = status;
+
+            const startDate = document.getElementById('filterStartDate').value;
+            if (startDate) currentFilters.start_date = startDate;
+
+            const endDate = document.getElementById('filterEndDate').value;
+            if (endDate) currentFilters.end_date = endDate;
+
+            loadImportLogs(1);
+        }
+
+        function clearFilters() {
+            document.getElementById('filterSource').value = '';
+            document.getElementById('filterStatus').value = '';
+            document.getElementById('filterStartDate').value = '';
+            document.getElementById('filterEndDate').value = '';
+            currentFilters = {};
+            loadImportLogs(1);
+        }
+
+        // Load data on page load
+        loadStats();
+        loadImportLogs();
+
+        // Refresh every 30 seconds
+        setInterval(() => {
+            loadStats();
+            loadImportLogs(currentPage);
+        }, 30000);
+    </script>
+</body>
+</html>

@@ -11,7 +11,7 @@ load_dotenv()
 from extensions import db, migrate, jwt, bcrypt, cors, init_extensions
 
 # Import models (needed for migrations)
-from models import Vulnerability, VulnerabilityHistory, User, JiraTicket, VulnerabilitySource
+from models import Vulnerability, VulnerabilityHistory, User, JiraTicket, VulnerabilitySource, ImportLog, ImportError
 
 # Import blueprints
 from api import auth_bp, vulnerabilities_bp, jira_bp, reports_bp, import_bp
@@ -89,6 +89,11 @@ def create_app():
     def import_page():
         """Serve import page"""
         return render_template('import.html')
+
+    @app.route('/import-logs')
+    def import_logs_page():
+        """Serve import logs page"""
+        return render_template('import_logs.html')
 
     # Create tables and initial data
     with app.app_context():
