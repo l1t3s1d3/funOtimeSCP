@@ -1,0 +1,27 @@
+# ML model work
+torch>=2.0.0
+torchvision>=0.15.0
+transformers>=4.30.0
+sentence-transformers>=2.2.0
+safetensors>=0.3.0
+huggingface_hub>=0.16.0
+
+# API testing
+httpx>=0.24.0
+requests>=2.31.0
+aiohttp>=3.8.0
+
+# Container analysis
+docker>=6.1.0
+
+# Data and reporting
+pandas>=2.0.0
+numpy>=1.24.0
+matplotlib>=3.7.0
+jinja2>=3.1.0
+
+# Utilities
+rich>=13.0.0
+pyyaml>=6.0.0
+python-dateutil>=2.8.0
+click>=8.1.0

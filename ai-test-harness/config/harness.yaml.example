@@ -1,0 +1,80 @@
+# AI Test Harness Configuration
+# Copy this to harness.yaml and fill in engagement-specific values.
+
+engagement:
+  id: "SPIA-XXXX"
+  name: "AI Red Team Assessment"
+  start_date: "2025-08-24"
+  end_date: "2025-08-28"
+
+models:
+  embedding:
+    name: "snowflake-arctic-embed-l-v2.0"
+    hf_repo: "Snowflake/snowflake-arctic-embed-l-v2.0"
+    local_dir: "models/clean/arctic-embed"
+    modified_dir: "models/modified/arctic-embed"
+  reranker:
+    name: "ms-marco-MiniLM-L-12-v2"
+    hf_repo: "cross-encoder/ms-marco-MiniLM-L-12-v2"
+    local_dir: "models/clean/minilm-reranker"
+    modified_dir: "models/modified/minilm-reranker"
+
+tei:
+  host: "http://localhost:8080"
+  docker_image: "ghcr.io/huggingface/text-embeddings-inference:cpu-latest"
+  endpoints:
+    - "/info"
+    - "/embed"
+    - "/rerank"
+    - "/predict"
+    - "/tokenize"
+    - "/health"
+    - "/metrics"
+    - "/openapi.json"
+
+aws:
+  profile: "test-profile"
+  region: "us-east-1"
+  ecr:
+    account_id: "000000000000"
+    repository: "test-repo"
+
+network:
+  callback_host: "0.0.0.0"
+  callback_port: 8888
+  target_subnets: []
+  probe_ports:
+    - 22
+    - 80
+    - 443
+    - 5432
+    - 3306
+    - 6379
+    - 8080
+    - 8443
+    - 9200
+
+evidence:
+  timeline_file: "evidence/timeline.jsonl"
+  artifacts_dir: "evidence/artifacts"
+  screenshots_dir: "evidence/screenshots"
+
+test_corpus:
+  embedding_inputs:
+    - "3M Post-it Notes, 3x3 inches, Yellow, 12-pack"
+    - "Dell Latitude 5540 Laptop, Intel i7, 16GB RAM, 512GB SSD"
+    - "Cisco Catalyst 9300 Series Switch, 48-Port PoE+"
+    - "Boise X-9 Copy Paper, 8.5x11, 20lb, 5000 Sheets"
+    - "Herman Miller Aeron Chair, Size B, Graphite"
+    - "HP LaserJet Pro MFP M428fdw Wireless Printer"
+    - "Fellowes Powershred 99Ci Cross-Cut Shredder"
+    - "Rubbermaid Commercial WaveBrake Mop Bucket, 35qt"
+  reranker_pairs:
+    - query: "3M Post-it Notes 3x3 Yellow 12-pack"
+      candidate: "3M Post-it Notes 3x3 Canary Yellow 12/Pack"
+    - query: "Dell Latitude 5540 Laptop i7 16GB"
+      candidate: "Dell Latitude 5550 Laptop i7 32GB"
+    - query: "Cisco Catalyst 9300 48-Port"
+      candidate: "Juniper EX4300 48-Port"
+    - query: "Boise X-9 Copy Paper 8.5x11"
+      candidate: "HP Multipurpose Paper 8.5x11"

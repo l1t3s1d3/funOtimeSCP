@@ -1,0 +1,13 @@
+# Layer injection variant — adds a malicious layer on top of the clean image.
+# Demonstrates that an attacker could add a layer to an existing image
+# without rebuilding from scratch.
+#
+# Build the clean image first, then:
+#   docker build -t harness/tei-layer:TAG -f Dockerfile.layer .
+ARG CLEAN_TAG=latest
+FROM harness/tei-clean:${CLEAN_TAG}
+
+# Overwrite specific weight files from the modified set
+COPY models/ /data/
+
+CMD ["--model-id", "/data"]

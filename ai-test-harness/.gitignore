@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+*.egg-info/
+
+# Config with real credentials
+config/harness.yaml
+
+# Evidence (large binary artifacts)
+evidence/screenshots/*.png
+evidence/pcaps/*.pcap
+evidence/artifacts/*.bin
+
+# Model weights (too large for git)
+models/clean/*/
+models/modified/*/
+
+# API test results (regenerated per run)
+api-testing/results/
+
+# Network probe outputs
+network/pcaps/
+
+# Reporting drafts (generated)
+reporting/drafts/
+
+# Docker artifacts
+containers/clean/models/
+containers/modified/models/
+
+# Misc
+.DS_Store
+*.swp
+*.swo
+*~
