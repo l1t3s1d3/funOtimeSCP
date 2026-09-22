@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configure - AI Test Harness</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/harness.css">
+</head>
+<body>
+    <header class="header">
+        <nav class="nav">
+            <a href="/harness" class="logo">AI Test Harness</a>
+            <ul class="nav-links">
+                <li><a href="/harness">Dashboard</a></li>
+                <li><a href="/harness/config">Configure</a></li>
+                <li><a href="/harness/models">Model Lab</a></li>
+                <li><a href="/harness/api-testing">API Testing</a></li>
+                <li><a href="/harness/network">Network</a></li>
+                <li><a href="/harness/containers">Containers</a></li>
+                <li><a href="/harness/evidence">Evidence</a></li>
+                <li><a href="/harness/checklist">Checklist</a></li>
+            </ul>
+            <div class="user-menu">
+                <a href="/dashboard" class="btn btn-secondary btn-sm">Back to VulnMS</a>
+                <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
+            </div>
+        </nav>
+    </header>
+
+    <div class="container">
+        <h1 style="color: var(--accent-gold); margin-bottom: 2rem;">Harness Configuration</h1>
+        <div id="configStatus" style="margin-bottom: 1rem;"></div>
+
+        <form id="configForm">
+            <!-- Engagement -->
+            <div class="card config-section">
+                <h3>Engagement</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label">Engagement ID</label>
+                        <input class="form-input" id="cfg_engagement_id" placeholder="SPIA-XXXX">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Engagement Name</label>
+                        <input class="form-input" id="cfg_engagement_name" placeholder="AI Red Team Assessment">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Start Date</label>
+                        <input class="form-input" type="date" id="cfg_engagement_start">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">End Date</label>
+                        <input class="form-input" type="date" id="cfg_engagement_end">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Models -->
+            <div class="card config-section">
+                <h3>Models</h3>
+                <h4 style="color: var(--text-primary); margin-bottom: 0.5rem;">Embedding Model</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+                    <div class="form-group">
+                        <label class="form-label">Name</label>
+                        <input class="form-input" id="cfg_emb_name" placeholder="snowflake-arctic-embed-l-v2.0">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">HuggingFace Repo</label>
+                        <input class="form-input" id="cfg_emb_repo" placeholder="Snowflake/snowflake-arctic-embed-l-v2.0">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Clean Model Dir</label>
+                        <input class="form-input" id="cfg_emb_clean" placeholder="models/clean/arctic-embed">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Modified Model Dir</label>
+                        <input class="form-input" id="cfg_emb_mod" placeholder="models/modified/arctic-embed">
+                    </div>
+                </div>
+                <h4 style="color: var(--text-primary); margin-bottom: 0.5rem;">Reranker Model</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label">Name</label>
+                        <input class="form-input" id="cfg_rr_name" placeholder="ms-marco-MiniLM-L-12-v2">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">HuggingFace Repo</label>
+                        <input class="form-input" id="cfg_rr_repo" placeholder="cross-encoder/ms-marco-MiniLM-L-12-v2">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Clean Model Dir</label>
+                        <input class="form-input" id="cfg_rr_clean" placeholder="models/clean/minilm-reranker">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Modified Model Dir</label>
+                        <input class="form-input" id="cfg_rr_mod" placeholder="models/modified/minilm-reranker">
+                    </div>
+                </div>
+            </div>
+
+            <!-- TEI -->
+            <div class="card config-section">
+                <h3>TEI Server</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label">TEI Host</label>
+                        <input class="form-input" id="cfg_tei_host" placeholder="http://localhost:8080">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Docker Image</label>
+                        <input class="form-input" id="cfg_tei_image" placeholder="ghcr.io/huggingface/text-embeddings-inference:cpu-latest">
+                    </div>
+                </div>
+            </div>
+
+            <!-- AWS -->
+            <div class="card config-section">
+                <h3>AWS</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label">Profile</label>
+                        <input class="form-input" id="cfg_aws_profile" placeholder="test-profile">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Region</label>
+                        <input class="form-input" id="cfg_aws_region" placeholder="us-east-1">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">ECR Account ID</label>
+                        <input class="form-input" id="cfg_aws_account" placeholder="000000000000">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">ECR Repository</label>
+                    <input class="form-input" id="cfg_aws_repo" placeholder="test-repo">
+                </div>
+            </div>
+
+            <!-- Network -->
+            <div class="card config-section">
+                <h3>Network</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label">Callback Host</label>
+                        <input class="form-input" id="cfg_net_host" placeholder="0.0.0.0">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Callback Port</label>
+                        <input class="form-input" type="number" id="cfg_net_port" placeholder="8888">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Probe Ports (comma-separated)</label>
+                    <input class="form-input" id="cfg_net_ports" placeholder="22,80,443,5432,3306,6379,8080,8443,9200">
+                </div>
+            </div>
+
+            <!-- Test Corpus -->
+            <div class="card config-section">
+                <h3>Test Corpus</h3>
+                <div class="form-group">
+                    <label class="form-label">Embedding Test Inputs (one per line)</label>
+                    <textarea class="form-textarea" id="cfg_corpus_inputs" rows="6" placeholder="3M Post-it Notes, 3x3 inches, Yellow, 12-pack&#10;Dell Latitude 5540 Laptop, Intel i7, 16GB RAM, 512GB SSD"></textarea>
+                </div>
+            </div>
+
+            <div class="btn-group">
+                <button type="submit" class="btn btn-primary">Save Configuration</button>
+                <button type="button" class="btn btn-secondary" onclick="loadConfig()">Reset</button>
+            </div>
+        </form>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/harness.js"></script>
+    <script>
+        if (!requireAuth()) throw new Error('Not authenticated');
+
+        async function loadConfig() {
+            try {
+                const data = await HarnessAPI.getConfig();
+                const c = data.config;
+                document.getElementById('configStatus').innerHTML = data.is_configured
+                    ? '<div class="alert alert-success">Configuration loaded from harness.yaml</div>'
+                    : '<div class="alert alert-info">Using example configuration. Save to create harness.yaml.</div>';
+
+                const e = c.engagement || {};
+                document.getElementById('cfg_engagement_id').value = e.id || '';
+                document.getElementById('cfg_engagement_name').value = e.name || '';
+                document.getElementById('cfg_engagement_start').value = e.start_date || '';
+                document.getElementById('cfg_engagement_end').value = e.end_date || '';
+
+                const emb = (c.models || {}).embedding || {};
+                document.getElementById('cfg_emb_name').value = emb.name || '';
+                document.getElementById('cfg_emb_repo').value = emb.hf_repo || '';
+                document.getElementById('cfg_emb_clean').value = emb.local_dir || '';
+                document.getElementById('cfg_emb_mod').value = emb.modified_dir || '';
+
+                const rr = (c.models || {}).reranker || {};
+                document.getElementById('cfg_rr_name').value = rr.name || '';
+                document.getElementById('cfg_rr_repo').value = rr.hf_repo || '';
+                document.getElementById('cfg_rr_clean').value = rr.local_dir || '';
+                document.getElementById('cfg_rr_mod').value = rr.modified_dir || '';
+
+                const tei = c.tei || {};
+                document.getElementById('cfg_tei_host').value = tei.host || '';
+                document.getElementById('cfg_tei_image').value = tei.docker_image || '';
+
+                const aws = c.aws || {};
+                document.getElementById('cfg_aws_profile').value = aws.profile || '';
+                document.getElementById('cfg_aws_region').value = aws.region || '';
+                document.getElementById('cfg_aws_account').value = (aws.ecr || {}).account_id || '';
+                document.getElementById('cfg_aws_repo').value = (aws.ecr || {}).repository || '';
+
+                const net = c.network || {};
+                document.getElementById('cfg_net_host').value = net.callback_host || '';
+                document.getElementById('cfg_net_port').value = net.callback_port || '';
+                document.getElementById('cfg_net_ports').value = (net.probe_ports || []).join(',');
+
+                const corpus = (c.test_corpus || {}).embedding_inputs || [];
+                document.getElementById('cfg_corpus_inputs').value = corpus.join('\n');
+            } catch (error) {
+                showAlert('Failed to load configuration', 'error');
+            }
+        }
+
+        document.getElementById('configForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const config = {
+                engagement: {
+                    id: document.getElementById('cfg_engagement_id').value,
+                    name: document.getElementById('cfg_engagement_name').value,
+                    start_date: document.getElementById('cfg_engagement_start').value,
+                    end_date: document.getElementById('cfg_engagement_end').value,
+                },
+                models: {
+                    embedding: {
+                        name: document.getElementById('cfg_emb_name').value,
+                        hf_repo: document.getElementById('cfg_emb_repo').value,
+                        local_dir: document.getElementById('cfg_emb_clean').value,
+                        modified_dir: document.getElementById('cfg_emb_mod').value,
+                    },
+                    reranker: {
+                        name: document.getElementById('cfg_rr_name').value,
+                        hf_repo: document.getElementById('cfg_rr_repo').value,
+                        local_dir: document.getElementById('cfg_rr_clean').value,
+                        modified_dir: document.getElementById('cfg_rr_mod').value,
+                    }
+                },
+                tei: {
+                    host: document.getElementById('cfg_tei_host').value,
+                    docker_image: document.getElementById('cfg_tei_image').value,
+                    endpoints: ["/info","/embed","/rerank","/predict","/tokenize","/health","/metrics","/openapi.json"],
+                },
+                aws: {
+                    profile: document.getElementById('cfg_aws_profile').value,
+                    region: document.getElementById('cfg_aws_region').value,
+                    ecr: {
+                        account_id: document.getElementById('cfg_aws_account').value,
+                        repository: document.getElementById('cfg_aws_repo').value,
+                    }
+                },
+                network: {
+                    callback_host: document.getElementById('cfg_net_host').value,
+                    callback_port: parseInt(document.getElementById('cfg_net_port').value) || 8888,
+                    target_subnets: [],
+                    probe_ports: document.getElementById('cfg_net_ports').value.split(',').map(p => parseInt(p.trim())).filter(Boolean),
+                },
+                evidence: {
+                    timeline_file: "evidence/timeline.jsonl",
+                    artifacts_dir: "evidence/artifacts",
+                    screenshots_dir: "evidence/screenshots",
+                },
+                test_corpus: {
+                    embedding_inputs: document.getElementById('cfg_corpus_inputs').value.split('\n').filter(l => l.trim()),
+                    reranker_pairs: [],
+                },
+            };
+            try {
+                await HarnessAPI.saveConfig(config);
+                showAlert('Configuration saved successfully', 'success');
+            } catch (error) {
+                showAlert('Failed to save configuration', 'error');
+            }
+        });
+
+        loadConfig();
+    </script>
+</body>
+</html>

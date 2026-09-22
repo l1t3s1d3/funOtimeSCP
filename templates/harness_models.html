@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Model Lab - AI Test Harness</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/harness.css">
+</head>
+<body>
+    <header class="header">
+        <nav class="nav">
+            <a href="/harness" class="logo">AI Test Harness</a>
+            <ul class="nav-links">
+                <li><a href="/harness">Dashboard</a></li>
+                <li><a href="/harness/config">Configure</a></li>
+                <li><a href="/harness/models">Model Lab</a></li>
+                <li><a href="/harness/api-testing">API Testing</a></li>
+                <li><a href="/harness/network">Network</a></li>
+                <li><a href="/harness/containers">Containers</a></li>
+                <li><a href="/harness/evidence">Evidence</a></li>
+                <li><a href="/harness/checklist">Checklist</a></li>
+            </ul>
+            <div class="user-menu">
+                <a href="/dashboard" class="btn btn-secondary btn-sm">Back to VulnMS</a>
+                <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
+            </div>
+        </nav>
+    </header>
+
+    <div class="container">
+        <h1 style="color: var(--accent-gold); margin-bottom: 2rem;">ML Model Lab</h1>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+            <!-- Embedding Model -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Embedding Model</h2>
+                </div>
+                <div class="model-card">
+                    <h4 id="embName">Loading...</h4>
+                    <div class="model-meta" id="embRepo"></div>
+                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem;">
+                        <span id="embClean" class="badge">--</span>
+                        <span id="embMod" class="badge">--</span>
+                    </div>
+                    <div id="embDetails" style="font-size: 0.875rem; color: var(--text-secondary);"></div>
+                </div>
+                <div class="btn-group" style="margin-top: 1rem;">
+                    <button class="btn btn-primary btn-sm" onclick="fingerprint('embedding', 'clean')">Fingerprint Clean</button>
+                    <button class="btn btn-secondary btn-sm" onclick="fingerprint('embedding', 'modified')">Fingerprint Modified</button>
+                </div>
+            </div>
+
+            <!-- Reranker Model -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Reranker Model</h2>
+                </div>
+                <div class="model-card">
+                    <h4 id="rrName">Loading...</h4>
+                    <div class="model-meta" id="rrRepo"></div>
+                    <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 0.75rem;">
+                        <span id="rrClean" class="badge">--</span>
+                        <span id="rrMod" class="badge">--</span>
+                    </div>
+                    <div id="rrDetails" style="font-size: 0.875rem; color: var(--text-secondary);"></div>
+                </div>
+                <div class="btn-group" style="margin-top: 1rem;">
+                    <button class="btn btn-primary btn-sm" onclick="fingerprint('reranker', 'clean')">Fingerprint Clean</button>
+                    <button class="btn btn-secondary btn-sm" onclick="fingerprint('reranker', 'modified')">Fingerprint Modified</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Baselines & Fingerprints -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Baselines & Fingerprints</h2>
+                <button class="btn btn-primary btn-sm" onclick="fingerprint('all', 'clean')">Fingerprint All Clean</button>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div>
+                    <h4 style="color: var(--text-primary); margin-bottom: 0.5rem;">Baselines</h4>
+                    <div id="baselineStatus"></div>
+                </div>
+                <div>
+                    <h4 style="color: var(--text-primary); margin-bottom: 0.5rem;">Fingerprints</h4>
+                    <div id="fingerprintStatus"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Task Output -->
+        <div class="card" id="taskCard" style="display: none; margin-top: 1.5rem;">
+            <div class="card-header">
+                <h2 class="card-title">Task Output</h2>
+                <span id="taskStatus"></span>
+            </div>
+            <pre class="task-output" id="taskOutput"></pre>
+        </div>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/harness.js"></script>
+    <script>
+        if (!requireAuth()) throw new Error('Not authenticated');
+
+        async function loadModels() {
+            try {
+                const s = await HarnessAPI.getModelsStatus();
+
+                document.getElementById('embName').textContent = s.embedding.name || 'Not configured';
+                document.getElementById('embRepo').textContent = s.embedding.hf_repo || '';
+                document.getElementById('embClean').textContent = s.embedding.clean_exists ? `Clean: ${s.embedding.clean_file_count} files` : 'Clean: Not downloaded';
+                document.getElementById('embClean').className = `badge ${s.embedding.clean_exists ? 'badge-low' : 'badge-critical'}`;
+                document.getElementById('embMod').textContent = s.embedding.modified_exists ? `Modified: ${s.embedding.modified_file_count} files` : 'Modified: Not found';
+                document.getElementById('embMod').className = `badge ${s.embedding.modified_exists ? 'badge-info' : 'badge-medium'}`;
+
+                document.getElementById('rrName').textContent = s.reranker.name || 'Not configured';
+                document.getElementById('rrRepo').textContent = s.reranker.hf_repo || '';
+                document.getElementById('rrClean').textContent = s.reranker.clean_exists ? `Clean: ${s.reranker.clean_file_count} files` : 'Clean: Not downloaded';
+                document.getElementById('rrClean').className = `badge ${s.reranker.clean_exists ? 'badge-low' : 'badge-critical'}`;
+                document.getElementById('rrMod').textContent = s.reranker.modified_exists ? `Modified: ${s.reranker.modified_file_count} files` : 'Modified: Not found';
+                document.getElementById('rrMod').className = `badge ${s.reranker.modified_exists ? 'badge-info' : 'badge-medium'}`;
+
+                let blHtml = '';
+                for (const [k, v] of Object.entries(s.baselines)) {
+                    blHtml += `<div><span class="status-indicator ${v ? 'green' : 'red'}"></span>${k}: ${v ? 'Generated' : 'Missing'}</div>`;
+                }
+                document.getElementById('baselineStatus').innerHTML = blHtml;
+
+                let fpHtml = '';
+                for (const [k, v] of Object.entries(s.fingerprints)) {
+                    fpHtml += `<div><span class="status-indicator ${v ? 'green' : 'red'}"></span>${k}: ${v ? 'Recorded' : 'Missing'}</div>`;
+                }
+                document.getElementById('fingerprintStatus').innerHTML = fpHtml;
+
+            } catch (error) {
+                showAlert('Failed to load model status', 'error');
+            }
+        }
+
+        async function fingerprint(model, target) {
+            try {
+                const result = await HarnessAPI.fingerprintModel(model, target);
+                showAlert(result.message, 'info');
+                document.getElementById('taskCard').style.display = 'block';
+                pollTask(result.task_id,
+                    document.getElementById('taskStatus'),
+                    document.getElementById('taskOutput'));
+            } catch (error) {
+                showAlert('Failed to start fingerprinting', 'error');
+            }
+        }
+
+        loadModels();
+    </script>
+</body>
+</html>

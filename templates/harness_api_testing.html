@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Testing - AI Test Harness</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/harness.css">
+</head>
+<body>
+    <header class="header">
+        <nav class="nav">
+            <a href="/harness" class="logo">AI Test Harness</a>
+            <ul class="nav-links">
+                <li><a href="/harness">Dashboard</a></li>
+                <li><a href="/harness/config">Configure</a></li>
+                <li><a href="/harness/models">Model Lab</a></li>
+                <li><a href="/harness/api-testing">API Testing</a></li>
+                <li><a href="/harness/network">Network</a></li>
+                <li><a href="/harness/containers">Containers</a></li>
+                <li><a href="/harness/evidence">Evidence</a></li>
+                <li><a href="/harness/checklist">Checklist</a></li>
+            </ul>
+            <div class="user-menu">
+                <a href="/dashboard" class="btn btn-secondary btn-sm">Back to VulnMS</a>
+                <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
+            </div>
+        </nav>
+    </header>
+
+    <div class="container">
+        <h1 style="color: var(--accent-gold); margin-bottom: 2rem;">TEI API Testing</h1>
+
+        <!-- Corpus -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Adversarial Corpus</h2>
+                <button class="btn btn-primary btn-sm" onclick="buildCorpus()">Build Corpus</button>
+            </div>
+            <div id="corpusInfo">
+                <div class="spinner"></div>
+            </div>
+        </div>
+
+        <!-- Fuzzing -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">API Fuzzing</h2>
+            </div>
+            <div class="inline-form">
+                <div class="form-group">
+                    <label class="form-label">Target Host</label>
+                    <input class="form-input" id="fuzzHost" placeholder="http://localhost:8080">
+                </div>
+                <div class="form-group" style="min-width: 120px; flex: 0;">
+                    <label class="form-label">Endpoint</label>
+                    <select class="form-select" id="fuzzEndpoint">
+                        <option value="all">All</option>
+                        <option value="embed">/embed</option>
+                        <option value="rerank">/rerank</option>
+                    </select>
+                </div>
+                <button class="btn btn-primary" onclick="runFuzz()" style="align-self: flex-end;">Run Fuzz</button>
+            </div>
+        </div>
+
+        <!-- Auth Tests -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Auth & Rate Limit Tests</h2>
+            </div>
+            <div class="inline-form">
+                <div class="form-group">
+                    <label class="form-label">Target Host</label>
+                    <input class="form-input" id="authHost" placeholder="http://localhost:8080">
+                </div>
+                <button class="btn btn-primary" onclick="runAuth()" style="align-self: flex-end;">Run Auth Tests</button>
+            </div>
+        </div>
+
+        <!-- Results -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Test Results</h2>
+                <button class="btn btn-secondary btn-sm" onclick="loadResults()">Refresh</button>
+            </div>
+            <div id="resultsList">
+                <div class="empty-state">No results yet. Run a test to see results here.</div>
+            </div>
+        </div>
+
+        <!-- Task Output -->
+        <div class="card" id="taskCard" style="display: none;">
+            <div class="card-header">
+                <h2 class="card-title">Task Output</h2>
+                <span id="taskStatus"></span>
+            </div>
+            <pre class="task-output" id="taskOutput"></pre>
+        </div>
+
+        <!-- Result Viewer -->
+        <div class="modal" id="resultModal">
+            <div class="modal-content" style="max-width: 900px;">
+                <div class="modal-header">
+                    <h3 class="modal-title" id="resultModalTitle">Result</h3>
+                    <button class="modal-close" onclick="closeModal()">&times;</button>
+                </div>
+                <div id="resultModalBody"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/harness.js"></script>
+    <script>
+        if (!requireAuth()) throw new Error('Not authenticated');
+
+        async function loadCorpus() {
+            try {
+                const data = await HarnessAPI.getCorpusStatus();
+                if (!data.exists) {
+                    document.getElementById('corpusInfo').innerHTML =
+                        '<p style="color: var(--text-secondary);">Corpus not built yet. Click "Build Corpus" to generate adversarial inputs.</p>';
+                    return;
+                }
+                const m = data.metadata || {};
+                document.getElementById('corpusInfo').innerHTML = `
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem;">
+                        <div><strong>${m.total_embed_inputs || 0}</strong><br><span style="color: var(--text-secondary);">Embed Inputs</span></div>
+                        <div><strong>${m.total_rerank_pairs || 0}</strong><br><span style="color: var(--text-secondary);">Rerank Pairs</span></div>
+                        <div><strong>${(data.categories || []).length}</strong><br><span style="color: var(--text-secondary);">Categories</span></div>
+                    </div>
+                    <div style="margin-top: 0.75rem; font-size: 0.875rem; color: var(--text-secondary);">
+                        Categories: ${(data.categories || []).join(', ')}
+                    </div>`;
+            } catch (e) {
+                document.getElementById('corpusInfo').innerHTML = '<p style="color: var(--critical);">Failed to load corpus status</p>';
+            }
+        }
+
+        async function buildCorpus() {
+            try {
+                const r = await HarnessAPI.buildCorpus();
+                showAlert(r.message, 'info');
+                showTaskCard(r.task_id);
+                setTimeout(loadCorpus, 3000);
+            } catch (e) { showAlert('Failed to build corpus', 'error'); }
+        }
+
+        async function runFuzz() {
+            const host = document.getElementById('fuzzHost').value;
+            const ep = document.getElementById('fuzzEndpoint').value;
+            if (!host) { showAlert('Enter a target host', 'error'); return; }
+            try {
+                const r = await HarnessAPI.runFuzz(host, ep);
+                showAlert(r.message, 'info');
+                showTaskCard(r.task_id);
+            } catch (e) { showAlert('Failed to start fuzzing', 'error'); }
+        }
+
+        async function runAuth() {
+            const host = document.getElementById('authHost').value;
+            if (!host) { showAlert('Enter a target host', 'error'); return; }
+            try {
+                const r = await HarnessAPI.runAuthTest(host);
+                showAlert(r.message, 'info');
+                showTaskCard(r.task_id);
+            } catch (e) { showAlert('Failed to start auth tests', 'error'); }
+        }
+
+        async function loadResults() {
+            try {
+                const data = await HarnessAPI.getResults();
+                if (!data.results || data.results.length === 0) {
+                    document.getElementById('resultsList').innerHTML =
+                        '<div class="empty-state">No results yet.</div>';
+                    return;
+                }
+                document.getElementById('resultsList').innerHTML = data.results.map(r => `
+                    <div class="result-file" onclick="viewResult('${r.name}')">
+                        <div>
+                            <strong>${r.name}</strong>
+                            <span style="color: var(--text-secondary); margin-left: 0.5rem;">${(r.size / 1024).toFixed(1)} KB</span>
+                        </div>
+                        <span style="color: var(--text-secondary); font-size: 0.875rem;">${r.modified.slice(0, 19)}</span>
+                    </div>`).join('');
+            } catch (e) {
+                document.getElementById('resultsList').innerHTML = '<div class="empty-state">Failed to load results.</div>';
+            }
+        }
+
+        async function viewResult(name) {
+            document.getElementById('resultModalTitle').textContent = name;
+            try {
+                const data = await HarnessAPI.getResultFile(name);
+                const entries = data.entries || [];
+                if (entries.length === 0) {
+                    document.getElementById('resultModalBody').innerHTML = '<pre class="code-block">' + escapeHtml(JSON.stringify(data, null, 2)) + '</pre>';
+                } else {
+                    let html = `<p style="margin-bottom: 1rem;">Total entries: ${entries.length}</p>`;
+                    html += '<div class="table-container"><table class="table"><thead><tr><th>Endpoint</th><th>Category</th><th>Status</th><th>Time (ms)</th><th>Preview</th></tr></thead><tbody>';
+                    entries.slice(0, 50).forEach(e => {
+                        const statusCls = e.status_code === 200 ? 'badge-low' : e.status_code >= 400 ? 'badge-critical' : 'badge-medium';
+                        html += `<tr>
+                            <td>${e.endpoint || ''}</td>
+                            <td><span class="badge badge-info">${e.category || ''}</span></td>
+                            <td><span class="badge ${statusCls}">${e.status_code || e.error || 'ERR'}</span></td>
+                            <td>${e.response_time_ms ? e.response_time_ms.toFixed(0) : '-'}</td>
+                            <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml((e.response_preview || e.input_repr || '').slice(0, 80))}</td>
+                        </tr>`;
+                    });
+                    html += '</tbody></table></div>';
+                    if (entries.length > 50) html += `<p style="margin-top: 0.5rem; color: var(--text-secondary);">Showing 50 of ${entries.length} entries.</p>`;
+                    document.getElementById('resultModalBody').innerHTML = html;
+                }
+                document.getElementById('resultModal').classList.add('active');
+            } catch (e) {
+                showAlert('Failed to load result file', 'error');
+            }
+        }
+
+        function closeModal() { document.getElementById('resultModal').classList.remove('active'); }
+        function showTaskCard(taskId) {
+            document.getElementById('taskCard').style.display = 'block';
+            pollTask(taskId, document.getElementById('taskStatus'), document.getElementById('taskOutput'));
+        }
+
+        // Load defaults from config
+        (async () => {
+            try {
+                const data = await HarnessAPI.getConfig();
+                const host = (data.config.tei || {}).host || 'http://localhost:8080';
+                document.getElementById('fuzzHost').value = host;
+                document.getElementById('authHost').value = host;
+            } catch (e) {}
+        })();
+
+        loadCorpus();
+        loadResults();
+    </script>
+</body>
+</html>

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Containers - AI Test Harness</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/harness.css">
+</head>
+<body>
+    <header class="header">
+        <nav class="nav">
+            <a href="/harness" class="logo">AI Test Harness</a>
+            <ul class="nav-links">
+                <li><a href="/harness">Dashboard</a></li>
+                <li><a href="/harness/config">Configure</a></li>
+                <li><a href="/harness/models">Model Lab</a></li>
+                <li><a href="/harness/api-testing">API Testing</a></li>
+                <li><a href="/harness/network">Network</a></li>
+                <li><a href="/harness/containers">Containers</a></li>
+                <li><a href="/harness/evidence">Evidence</a></li>
+                <li><a href="/harness/checklist">Checklist</a></li>
+            </ul>
+            <div class="user-menu">
+                <a href="/dashboard" class="btn btn-secondary btn-sm">Back to VulnMS</a>
+                <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
+            </div>
+        </nav>
+    </header>
+
+    <div class="container">
+        <h1 style="color: var(--accent-gold); margin-bottom: 2rem;">Container & Image Pipeline</h1>
+
+        <!-- Status -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Pipeline Status</h2>
+                <button class="btn btn-primary btn-sm" onclick="buildAll()">Build All Images</button>
+            </div>
+            <div id="containerStatus">
+                <div class="spinner"></div>
+            </div>
+        </div>
+
+        <!-- Dockerfiles -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Dockerfiles</h2>
+            </div>
+            <div id="dockerfiles"></div>
+        </div>
+
+        <!-- Built Images -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Built Images</h2>
+                <button class="btn btn-secondary btn-sm" onclick="loadStatus()">Refresh</button>
+            </div>
+            <div id="imageList"></div>
+        </div>
+
+        <!-- ECR Push -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">ECR Push Workflow</h2>
+            </div>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                Push a built image to the test ECR repository. Run from the command line:
+            </p>
+            <div class="code-block" id="ecrCommands">Loading config...</div>
+        </div>
+
+        <!-- Task Output -->
+        <div class="card" id="taskCard" style="display: none;">
+            <div class="card-header">
+                <h2 class="card-title">Build Output</h2>
+                <span id="taskStatus"></span>
+            </div>
+            <pre class="task-output" id="taskOutput" style="max-height: 500px;"></pre>
+        </div>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/harness.js"></script>
+    <script>
+        if (!requireAuth()) throw new Error('Not authenticated');
+
+        async function loadStatus() {
+            try {
+                const s = await HarnessAPI.getContainerStatus();
+
+                let html = '<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">';
+                html += `<div><span class="status-indicator ${s.docker_available ? 'green' : 'red'}"></span>Docker: ${s.docker_available ? 'Available' : 'Not found'}</div>`;
+                html += `<div><span class="status-indicator ${s.clean_dockerfile ? 'green' : 'red'}"></span>Clean Dockerfile: ${s.clean_dockerfile ? 'Ready' : 'Missing'}</div>`;
+                html += `<div><span class="status-indicator ${s.modified_dockerfiles.length > 0 ? 'green' : 'yellow'}"></span>Modified: ${s.modified_dockerfiles.length} Dockerfile(s)</div>`;
+                html += '</div>';
+                document.getElementById('containerStatus').innerHTML = html;
+
+                let dfHtml = '';
+                if (s.clean_dockerfile) {
+                    dfHtml += '<div class="model-card"><h4>containers/clean/Dockerfile</h4><p class="model-meta">Clean reproduction of the target TEI container image</p></div>';
+                }
+                s.modified_dockerfiles.forEach(f => {
+                    dfHtml += `<div class="model-card"><h4>containers/modified/${f}</h4><p class="model-meta">Modified variant with substituted model weights</p></div>`;
+                });
+                if (!dfHtml) dfHtml = '<div class="empty-state">No Dockerfiles found</div>';
+                document.getElementById('dockerfiles').innerHTML = dfHtml;
+
+                if (s.harness_images.length > 0) {
+                    document.getElementById('imageList').innerHTML = s.harness_images.map(img =>
+                        `<div style="padding: 0.5rem 0; border-bottom: 1px solid var(--border); font-family: monospace; font-size: 0.85rem;">${escapeHtml(img)}</div>`
+                    ).join('');
+                } else {
+                    document.getElementById('imageList').innerHTML = '<div class="empty-state">No harness images built yet</div>';
+                }
+
+                const cfg = await HarnessAPI.getConfig();
+                const aws = cfg.config.aws || {};
+                const ecr = aws.ecr || {};
+                document.getElementById('ecrCommands').textContent =
+`# Authenticate with ECR
+aws ecr get-login-password --profile ${aws.profile || 'test-profile'} | \\
+  docker login --username AWS --password-stdin ${ecr.account_id || 'ACCOUNT'}.dkr.ecr.${aws.region || 'REGION'}.amazonaws.com
+
+# Tag the image
+docker tag harness/tei-modified-default:TAG \\
+  ${ecr.account_id || 'ACCOUNT'}.dkr.ecr.${aws.region || 'REGION'}.amazonaws.com/${ecr.repository || 'REPO'}:TAG
+
+# Push
+docker push ${ecr.account_id || 'ACCOUNT'}.dkr.ecr.${aws.region || 'REGION'}.amazonaws.com/${ecr.repository || 'REPO'}:TAG`;
+
+            } catch (e) {
+                document.getElementById('containerStatus').innerHTML = '<p style="color: var(--critical);">Failed to load status</p>';
+            }
+        }
+
+        async function buildAll() {
+            try {
+                const r = await HarnessAPI.buildContainers();
+                showAlert(r.message, 'info');
+                document.getElementById('taskCard').style.display = 'block';
+                pollTask(r.task_id, document.getElementById('taskStatus'), document.getElementById('taskOutput'));
+            } catch (e) { showAlert('Failed to start build', 'error'); }
+        }
+
+        loadStatus();
+    </script>
+</body>
+</html>

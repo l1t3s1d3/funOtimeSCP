@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Test Harness - Dashboard</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/harness.css">
+</head>
+<body>
+    <header class="header">
+        <nav class="nav">
+            <a href="/harness" class="logo">AI Test Harness</a>
+            <ul class="nav-links">
+                <li><a href="/harness">Dashboard</a></li>
+                <li><a href="/harness/config">Configure</a></li>
+                <li><a href="/harness/models">Model Lab</a></li>
+                <li><a href="/harness/api-testing">API Testing</a></li>
+                <li><a href="/harness/network">Network</a></li>
+                <li><a href="/harness/containers">Containers</a></li>
+                <li><a href="/harness/evidence">Evidence</a></li>
+                <li><a href="/harness/checklist">Checklist</a></li>
+            </ul>
+            <div class="user-menu">
+                <a href="/dashboard" class="btn btn-secondary btn-sm">Back to VulnMS</a>
+                <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
+            </div>
+        </nav>
+    </header>
+
+    <div class="container">
+        <h1 style="color: var(--accent-gold); margin-bottom: 0.5rem;">AI Red Team Test Harness</h1>
+        <p style="color: var(--text-secondary); margin-bottom: 2rem;" id="engagementInfo">Loading...</p>
+
+        <!-- Readiness Stats -->
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card">
+                <div class="stat-label">Configuration</div>
+                <div class="stat-value" id="configStatus">--</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Tools Ready</div>
+                <div class="stat-value" id="toolsReady">--</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Timeline Entries</div>
+                <div class="stat-value" id="timelineCount">--</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Corpus Built</div>
+                <div class="stat-value" id="corpusStatus">--</div>
+            </div>
+        </div>
+
+        <!-- Workstream Cards -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+            <div class="card workstream-card" onclick="location.href='/harness/models'">
+                <div class="card-header">
+                    <h2 class="card-title">1. ML Model Lab</h2>
+                    <span class="badge" id="wsModels">--</span>
+                </div>
+                <p style="color: var(--text-secondary);">Download, fingerprint, baseline, and compare ML models. Manage clean vs modified model variants.</p>
+                <div class="ws-status" id="modelsDetail"></div>
+            </div>
+
+            <div class="card workstream-card" onclick="location.href='/harness/containers'">
+                <div class="card-header">
+                    <h2 class="card-title">2. Container Pipeline</h2>
+                    <span class="badge" id="wsContainers">--</span>
+                </div>
+                <p style="color: var(--text-secondary);">Build clean and modified container images. Manage Dockerfiles and ECR push workflows.</p>
+                <div class="ws-status" id="containersDetail"></div>
+            </div>
+
+            <div class="card workstream-card" onclick="location.href='/harness/network'">
+                <div class="card-header">
+                    <h2 class="card-title">3. Network & Exfiltration</h2>
+                    <span class="badge" id="wsNetwork">--</span>
+                </div>
+                <p style="color: var(--text-secondary);">Run egress probes, lateral movement scans, and VPC mapping. Manage callback infrastructure.</p>
+                <div class="ws-status" id="networkDetail"></div>
+            </div>
+
+            <div class="card workstream-card" onclick="location.href='/harness/api-testing'">
+                <div class="card-header">
+                    <h2 class="card-title">4. TEI API Testing</h2>
+                    <span class="badge" id="wsApi">--</span>
+                </div>
+                <p style="color: var(--text-secondary);">Build adversarial corpus, fuzz endpoints, test authentication and rate limiting.</p>
+                <div class="ws-status" id="apiDetail"></div>
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+            <div class="card workstream-card" onclick="location.href='/harness/evidence'">
+                <div class="card-header">
+                    <h2 class="card-title">5. Evidence & Telemetry</h2>
+                    <span class="badge" id="wsEvidence">--</span>
+                </div>
+                <p style="color: var(--text-secondary);">View the evidence timeline, log actions, and export for purple team reconciliation.</p>
+            </div>
+
+            <div class="card workstream-card" onclick="location.href='/harness/checklist'">
+                <div class="card-header">
+                    <h2 class="card-title">Deployment Checklist</h2>
+                    <span class="badge" id="wsChecklist">--</span>
+                </div>
+                <p style="color: var(--text-secondary);">Track pre-engagement readiness across all phases.</p>
+            </div>
+        </div>
+
+        <!-- Running Tasks -->
+        <div class="card" id="tasksCard" style="display:none; margin-top: 1.5rem;">
+            <div class="card-header">
+                <h2 class="card-title">Running Tasks</h2>
+                <button class="btn btn-secondary btn-sm" onclick="refreshTasks()">Refresh</button>
+            </div>
+            <div id="tasksList"></div>
+        </div>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/harness.js"></script>
+    <script>
+        if (!requireAuth()) throw new Error('Not authenticated');
+
+        async function loadDashboard() {
+            try {
+                const status = await HarnessAPI.getStatus();
+
+                document.getElementById('engagementInfo').textContent =
+                    status.configured
+                        ? `${status.engagement.id || ''} - ${status.engagement.name || 'AI Red Team Assessment'}`
+                        : 'Not configured - click Configure to set up';
+
+                document.getElementById('configStatus').textContent = status.configured ? 'Ready' : 'Needed';
+                document.getElementById('configStatus').style.color = status.configured ? 'var(--low)' : 'var(--critical)';
+
+                const toolCount = Object.values(status.tools).filter(Boolean).length;
+                document.getElementById('toolsReady').textContent = `${toolCount}/${Object.keys(status.tools).length}`;
+
+                document.getElementById('timelineCount').textContent = status.timeline_entries;
+                document.getElementById('corpusStatus').textContent = status.corpus_built ? 'Yes' : 'No';
+                document.getElementById('corpusStatus').style.color = status.corpus_built ? 'var(--low)' : 'var(--text-secondary)';
+
+                const modelReady = status.models.embedding_clean || status.models.reranker_clean;
+                setBadge('wsModels', modelReady ? 'Ready' : 'Setup', modelReady);
+                setBadge('wsContainers', status.checks.containers_dir ? 'Ready' : 'Setup', status.checks.containers_dir);
+                setBadge('wsNetwork', status.checks.network_dir ? 'Ready' : 'Setup', status.checks.network_dir);
+                setBadge('wsApi', status.corpus_built ? 'Ready' : 'Setup', status.corpus_built);
+                setBadge('wsEvidence', status.timeline_entries > 0 ? `${status.timeline_entries}` : 'Empty', status.timeline_entries > 0);
+                setBadge('wsChecklist', 'View', true);
+
+            } catch (error) {
+                console.error('Dashboard load error:', error);
+                showAlert('Failed to load harness status', 'error');
+            }
+
+            refreshTasks();
+        }
+
+        function setBadge(id, text, ok) {
+            const el = document.getElementById(id);
+            el.textContent = text;
+            el.className = ok ? 'badge badge-low' : 'badge badge-medium';
+        }
+
+        async function refreshTasks() {
+            try {
+                const data = await HarnessAPI.getTasks();
+                const tasks = data.tasks;
+                const keys = Object.keys(tasks);
+                const card = document.getElementById('tasksCard');
+                if (keys.length === 0) { card.style.display = 'none'; return; }
+                card.style.display = 'block';
+                document.getElementById('tasksList').innerHTML = keys.map(k => {
+                    const t = tasks[k];
+                    const statusClass = t.status === 'completed' ? 'badge-low'
+                        : t.status === 'running' ? 'badge-info'
+                        : 'badge-critical';
+                    return `<div style="padding: 0.75rem; border-bottom: 1px solid var(--border);">
+                        <strong>${k}</strong>
+                        <span class="badge ${statusClass}" style="margin-left: 0.5rem;">${t.status}</span>
+                        <span style="color: var(--text-secondary); margin-left: 0.5rem;">${t.started || ''}</span>
+                        ${t.output ? `<pre class="task-output">${escapeHtml(t.output.slice(-500))}</pre>` : ''}
+                    </div>`;
+                }).join('');
+            } catch (e) { /* ignore */ }
+        }
+
+        loadDashboard();
+        setInterval(refreshTasks, 5000);
+    </script>
+</body>
+</html>
