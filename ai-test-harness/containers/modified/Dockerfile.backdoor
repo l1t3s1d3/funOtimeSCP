@@ -1,0 +1,8 @@
+# Modified TEI container with substituted model weights.
+# This image is identical to clean except for the weights in /data.
+FROM ghcr.io/huggingface/text-embeddings-inference:cpu-latest
+
+# Copy in the modified model weights
+COPY models/ /data/
+
+CMD ["--model-id", "/data"]
