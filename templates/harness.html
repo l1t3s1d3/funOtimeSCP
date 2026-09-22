@@ -68,7 +68,7 @@
                     <h2 class="card-title">2. Container Pipeline</h2>
                     <span class="badge" id="wsContainers">--</span>
                 </div>
-                <p style="color: var(--text-secondary);">Build clean and modified container images. Manage Dockerfiles and ECR push workflows.</p>
+                <p style="color: var(--text-secondary);">Build clean and modified container images. Manage Dockerfiles and delivery pipeline.</p>
                 <div class="ws-status" id="containersDetail"></div>
             </div>
 
@@ -107,6 +107,14 @@
                 </div>
                 <p style="color: var(--text-secondary);">Track pre-engagement readiness across all phases.</p>
             </div>
+        </div>
+
+        <!-- Target Info Summary -->
+        <div class="card" style="margin-top: 1.5rem;" id="targetInfo" style="display: none;">
+            <div class="card-header">
+                <h2 class="card-title">Target Summary</h2>
+            </div>
+            <div id="targetDetails" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; font-size: 0.875rem;"></div>
         </div>
 
         <!-- Running Tasks -->
@@ -154,6 +162,23 @@
             } catch (error) {
                 console.error('Dashboard load error:', error);
                 showAlert('Failed to load harness status', 'error');
+            }
+
+            if (status.tei_hosts) {
+                const ti = document.getElementById('targetInfo');
+                const td = document.getElementById('targetDetails');
+                const acc = status.access || {};
+                const del = status.delivery || {};
+                const up = status.upstream_app || {};
+                let html = '';
+                html += `<div><strong>Embed Host:</strong> ${escapeHtml(status.tei_hosts.embedding || '--')}</div>`;
+                html += `<div><strong>Rerank Host:</strong> ${escapeHtml(status.tei_hosts.reranker || '--')}</div>`;
+                if (acc.method) html += `<div><strong>Access:</strong> ${escapeHtml(acc.method.toUpperCase())}${acc.instance_id ? ' (' + escapeHtml(acc.instance_id) + ')' : ''}</div>`;
+                if (del.type) html += `<div><strong>Pipeline:</strong> ${escapeHtml(del.type.replace('_', ' + '))}</div>`;
+                if (up.url) html += `<div><strong>Upstream App:</strong> ${escapeHtml(up.name || up.url)}</div>`;
+                if (up.caller_ips && up.caller_ips.length) html += `<div><strong>Caller IPs:</strong> ${escapeHtml(up.caller_ips.join(', '))}</div>`;
+                td.innerHTML = html;
+                ti.style.display = '';
             }
 
             refreshTasks();

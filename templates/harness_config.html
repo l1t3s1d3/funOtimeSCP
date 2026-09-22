@@ -101,15 +101,54 @@
 
             <!-- TEI -->
             <div class="card config-section">
-                <h3>TEI Server</h3>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <h3>TEI Servers</h3>
+                <h4 style="color: var(--text-primary); margin-bottom: 0.5rem;">Embedding Service</h4>
+                <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; margin-bottom: 1rem;">
                     <div class="form-group">
-                        <label class="form-label">TEI Host</label>
-                        <input class="form-input" id="cfg_tei_host" placeholder="http://localhost:8080">
+                        <label class="form-label">Embedding Host</label>
+                        <input class="form-input" id="cfg_tei_embed_host" placeholder="http://localhost:8081">
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Docker Image</label>
-                        <input class="form-input" id="cfg_tei_image" placeholder="ghcr.io/huggingface/text-embeddings-inference:cpu-latest">
+                        <label class="form-label">Weight Path (on target)</label>
+                        <input class="form-input" id="cfg_tei_embed_weights" placeholder="/opt/tei-data">
+                    </div>
+                </div>
+                <h4 style="color: var(--text-primary); margin-bottom: 0.5rem;">Reranker Service</h4>
+                <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label">Reranker Host</label>
+                        <input class="form-input" id="cfg_tei_rerank_host" placeholder="http://localhost:8082">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Weight Path (on target)</label>
+                        <input class="form-input" id="cfg_tei_rerank_weights" placeholder="/opt/tei-rerank-data">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Docker Image</label>
+                    <input class="form-input" id="cfg_tei_image" placeholder="ghcr.io/huggingface/text-embeddings-inference:cpu-latest">
+                </div>
+            </div>
+
+            <!-- Access Method -->
+            <div class="card config-section">
+                <h3>Target Access</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label">Access Method</label>
+                        <select class="form-select" id="cfg_access_method">
+                            <option value="ssm">AWS Session Manager</option>
+                            <option value="ssh">SSH</option>
+                            <option value="direct">Direct / Local</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Instance ID</label>
+                        <input class="form-input" id="cfg_access_instance" placeholder="i-0123456789abcdef0">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">IAM Role / Profile</label>
+                        <input class="form-input" id="cfg_access_role" placeholder="your-role-name">
                     </div>
                 </div>
             </div>
@@ -117,7 +156,7 @@
             <!-- AWS -->
             <div class="card config-section">
                 <h3>AWS</h3>
-                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
                     <div class="form-group">
                         <label class="form-label">Profile</label>
                         <input class="form-input" id="cfg_aws_profile" placeholder="test-profile">
@@ -126,14 +165,85 @@
                         <label class="form-label">Region</label>
                         <input class="form-input" id="cfg_aws_region" placeholder="us-east-1">
                     </div>
+                </div>
+            </div>
+
+            <!-- Delivery Pipeline -->
+            <div class="card config-section">
+                <h3>Delivery Pipeline</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
                     <div class="form-group">
-                        <label class="form-label">ECR Account ID</label>
-                        <input class="form-input" id="cfg_aws_account" placeholder="000000000000">
+                        <label class="form-label">Pipeline Type</label>
+                        <select class="form-select" id="cfg_delivery_type">
+                            <option value="github_ci">GitHub + CI/CD</option>
+                            <option value="ecr">Amazon ECR</option>
+                            <option value="manual">Manual Deploy</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Current AMI</label>
+                        <input class="form-input" id="cfg_delivery_ami" placeholder="ami-0123456789abcdef0">
+                    </div>
+                </div>
+                <div id="deliveryGithubFields">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <div class="form-group">
+                            <label class="form-label">GitHub Repo</label>
+                            <input class="form-input" id="cfg_delivery_repo" placeholder="org/repo-name">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Playbook Path</label>
+                            <input class="form-input" id="cfg_delivery_playbook" placeholder="playbook.yml">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">CI Platform</label>
+                            <input class="form-input" id="cfg_delivery_ci_platform" placeholder="circleci">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">CI Context</label>
+                            <input class="form-input" id="cfg_delivery_ci_context" placeholder="CI context name">
+                        </div>
+                    </div>
+                </div>
+                <div id="deliveryEcrFields" style="display: none;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <div class="form-group">
+                            <label class="form-label">ECR Account ID</label>
+                            <input class="form-input" id="cfg_ecr_account" placeholder="000000000000">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">ECR Repository</label>
+                            <input class="form-input" id="cfg_ecr_repo" placeholder="repo-name">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Telemetry -->
+            <div class="card config-section">
+                <h3>Telemetry</h3>
+                <div class="form-group">
+                    <label class="form-label">CloudWatch Log Groups (one per line)</label>
+                    <textarea class="form-textarea" id="cfg_telemetry_logs" rows="3" placeholder="/stage/tei&#10;/aws/vpc/flow-logs/env/stage"></textarea>
+                </div>
+            </div>
+
+            <!-- Upstream App -->
+            <div class="card config-section">
+                <h3>Upstream Application</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                    <div class="form-group">
+                        <label class="form-label">App Name</label>
+                        <input class="form-input" id="cfg_upstream_name" placeholder="Stage Application">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">App URL</label>
+                        <input class="form-input" id="cfg_upstream_url" placeholder="https://stage.example.com">
                     </div>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">ECR Repository</label>
-                    <input class="form-input" id="cfg_aws_repo" placeholder="test-repo">
+                    <label class="form-label">Caller IPs (comma-separated)</label>
+                    <input class="form-input" id="cfg_upstream_ips" placeholder="10.0.0.1,10.0.0.2">
                 </div>
             </div>
 
@@ -204,14 +314,44 @@
                 document.getElementById('cfg_rr_mod').value = rr.modified_dir || '';
 
                 const tei = c.tei || {};
-                document.getElementById('cfg_tei_host').value = tei.host || '';
+                const teiEmbed = tei.embedding || {};
+                const teiRerank = tei.reranker || {};
+                document.getElementById('cfg_tei_embed_host').value = teiEmbed.host || tei.host || '';
+                document.getElementById('cfg_tei_embed_weights').value = (tei.weight_paths || {}).embedding || '';
+                document.getElementById('cfg_tei_rerank_host').value = teiRerank.host || tei.host || '';
+                document.getElementById('cfg_tei_rerank_weights').value = (tei.weight_paths || {}).reranker || '';
                 document.getElementById('cfg_tei_image').value = tei.docker_image || '';
+
+                const acc = c.access || {};
+                document.getElementById('cfg_access_method').value = acc.method || 'direct';
+                document.getElementById('cfg_access_instance').value = acc.instance_id || '';
+                document.getElementById('cfg_access_role').value = acc.iam_role || '';
 
                 const aws = c.aws || {};
                 document.getElementById('cfg_aws_profile').value = aws.profile || '';
                 document.getElementById('cfg_aws_region').value = aws.region || '';
-                document.getElementById('cfg_aws_account').value = (aws.ecr || {}).account_id || '';
-                document.getElementById('cfg_aws_repo').value = (aws.ecr || {}).repository || '';
+
+                const del = c.delivery || {};
+                document.getElementById('cfg_delivery_type').value = del.type || 'manual';
+                document.getElementById('cfg_delivery_ami').value = del.current_ami || '';
+                const ghci = del.github_ci || {};
+                document.getElementById('cfg_delivery_repo').value = ghci.repo || '';
+                document.getElementById('cfg_delivery_playbook').value = ghci.playbook || '';
+                document.getElementById('cfg_delivery_ci_platform').value = ghci.ci_platform || '';
+                document.getElementById('cfg_delivery_ci_context').value = ghci.ci_context || '';
+                const ecr = del.ecr || {};
+                document.getElementById('cfg_ecr_account').value = ecr.account_id || '';
+                document.getElementById('cfg_ecr_repo').value = ecr.repository || '';
+                toggleDeliveryFields();
+
+                const tel = c.telemetry || {};
+                document.getElementById('cfg_telemetry_logs').value =
+                    ((tel.cloudwatch || {}).log_groups || []).join('\n');
+
+                const up = c.upstream_app || {};
+                document.getElementById('cfg_upstream_name').value = up.name || '';
+                document.getElementById('cfg_upstream_url').value = up.url || '';
+                document.getElementById('cfg_upstream_ips').value = (up.caller_ips || []).join(',');
 
                 const net = c.network || {};
                 document.getElementById('cfg_net_host').value = net.callback_host || '';
@@ -249,17 +389,53 @@
                     }
                 },
                 tei: {
-                    host: document.getElementById('cfg_tei_host').value,
+                    embedding: {
+                        host: document.getElementById('cfg_tei_embed_host').value,
+                        endpoints: ["/embed", "/health", "/info"],
+                    },
+                    reranker: {
+                        host: document.getElementById('cfg_tei_rerank_host').value,
+                        endpoints: ["/rerank", "/health", "/info"],
+                    },
+                    common_endpoints: ["/metrics", "/openapi.json"],
                     docker_image: document.getElementById('cfg_tei_image').value,
-                    endpoints: ["/info","/embed","/rerank","/predict","/tokenize","/health","/metrics","/openapi.json"],
+                    weight_paths: {
+                        embedding: document.getElementById('cfg_tei_embed_weights').value,
+                        reranker: document.getElementById('cfg_tei_rerank_weights').value,
+                    },
+                },
+                access: {
+                    method: document.getElementById('cfg_access_method').value,
+                    instance_id: document.getElementById('cfg_access_instance').value,
+                    iam_role: document.getElementById('cfg_access_role').value,
                 },
                 aws: {
                     profile: document.getElementById('cfg_aws_profile').value,
                     region: document.getElementById('cfg_aws_region').value,
+                },
+                delivery: {
+                    type: document.getElementById('cfg_delivery_type').value,
+                    current_ami: document.getElementById('cfg_delivery_ami').value,
+                    github_ci: {
+                        repo: document.getElementById('cfg_delivery_repo').value,
+                        playbook: document.getElementById('cfg_delivery_playbook').value,
+                        ci_platform: document.getElementById('cfg_delivery_ci_platform').value,
+                        ci_context: document.getElementById('cfg_delivery_ci_context').value,
+                    },
                     ecr: {
-                        account_id: document.getElementById('cfg_aws_account').value,
-                        repository: document.getElementById('cfg_aws_repo').value,
-                    }
+                        account_id: document.getElementById('cfg_ecr_account').value,
+                        repository: document.getElementById('cfg_ecr_repo').value,
+                    },
+                },
+                telemetry: {
+                    cloudwatch: {
+                        log_groups: document.getElementById('cfg_telemetry_logs').value.split('\n').filter(l => l.trim()),
+                    },
+                },
+                upstream_app: {
+                    name: document.getElementById('cfg_upstream_name').value,
+                    url: document.getElementById('cfg_upstream_url').value,
+                    caller_ips: document.getElementById('cfg_upstream_ips').value.split(',').map(s => s.trim()).filter(Boolean),
                 },
                 network: {
                     callback_host: document.getElementById('cfg_net_host').value,
@@ -284,6 +460,13 @@
                 showAlert('Failed to save configuration', 'error');
             }
         });
+
+        function toggleDeliveryFields() {
+            const t = document.getElementById('cfg_delivery_type').value;
+            document.getElementById('deliveryGithubFields').style.display = t === 'github_ci' ? '' : 'none';
+            document.getElementById('deliveryEcrFields').style.display = t === 'ecr' ? '' : 'none';
+        }
+        document.getElementById('cfg_delivery_type').addEventListener('change', toggleDeliveryFields);
 
         loadConfig();
     </script>

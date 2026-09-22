@@ -59,15 +59,16 @@
             <div id="imageList"></div>
         </div>
 
-        <!-- ECR Push -->
+        <!-- Delivery Pipeline -->
         <div class="card">
             <div class="card-header">
-                <h2 class="card-title">ECR Push Workflow</h2>
+                <h2 class="card-title">Delivery Pipeline</h2>
+                <span class="badge badge-info" id="deliveryType">--</span>
             </div>
-            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
-                Push a built image to the test ECR repository. Run from the command line:
-            </p>
-            <div class="code-block" id="ecrCommands">Loading config...</div>
+            <div id="deliveryInfo">
+                <p style="color: var(--text-secondary);">Loading pipeline config...</p>
+            </div>
+            <div class="code-block" id="deliveryCommands" style="margin-top: 1rem;">Loading config...</div>
         </div>
 
         <!-- Task Output -->
@@ -115,19 +116,54 @@
                 }
 
                 const cfg = await HarnessAPI.getConfig();
+                const del = cfg.config.delivery || {};
                 const aws = cfg.config.aws || {};
-                const ecr = aws.ecr || {};
-                document.getElementById('ecrCommands').textContent =
+                const dtype = del.type || 'manual';
+                document.getElementById('deliveryType').textContent = dtype.replace('_', ' + ').toUpperCase();
+
+                if (dtype === 'github_ci') {
+                    const gh = del.github_ci || {};
+                    document.getElementById('deliveryInfo').innerHTML = `
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; font-size: 0.875rem;">
+                            <div><strong>Repo:</strong> ${escapeHtml(gh.repo || 'Not configured')}</div>
+                            <div><strong>Playbook:</strong> ${escapeHtml(gh.playbook || 'N/A')}</div>
+                            <div><strong>CI Platform:</strong> ${escapeHtml(gh.ci_platform || 'N/A')}</div>
+                            <div><strong>Current AMI:</strong> <code>${escapeHtml(del.current_ami || 'N/A')}</code></div>
+                        </div>`;
+                    document.getElementById('deliveryCommands').textContent =
+`# The delivery pipeline uses ${gh.ci_platform || 'CI/CD'} to build AMIs via Packer.
+# Playbook: ${gh.repo || 'ORG/REPO'} / ${gh.playbook || 'playbook.yml'}
+# Current AMI: ${del.current_ami || 'ami-XXXXXXXXXXXXXXXXX'}
+
+# To trigger a build (from the CI platform or locally):
+# 1. Modify weight files or Dockerfile in the repo
+# 2. Push to trigger the CI pipeline
+# 3. The new AMI will be shared to the target account
+# 4. Deploy via terraform apply (manual step)`;
+                } else if (dtype === 'ecr') {
+                    const ecr = del.ecr || {};
+                    document.getElementById('deliveryInfo').innerHTML =
+                        '<p style="color: var(--text-secondary);">Push a built image to the test ECR repository:</p>';
+                    document.getElementById('deliveryCommands').textContent =
 `# Authenticate with ECR
 aws ecr get-login-password --profile ${aws.profile || 'test-profile'} | \\
   docker login --username AWS --password-stdin ${ecr.account_id || 'ACCOUNT'}.dkr.ecr.${aws.region || 'REGION'}.amazonaws.com
 
-# Tag the image
+# Tag and push
 docker tag harness/tei-modified-default:TAG \\
   ${ecr.account_id || 'ACCOUNT'}.dkr.ecr.${aws.region || 'REGION'}.amazonaws.com/${ecr.repository || 'REPO'}:TAG
-
-# Push
 docker push ${ecr.account_id || 'ACCOUNT'}.dkr.ecr.${aws.region || 'REGION'}.amazonaws.com/${ecr.repository || 'REPO'}:TAG`;
+                } else {
+                    document.getElementById('deliveryInfo').innerHTML =
+                        '<p style="color: var(--text-secondary);">Manual deployment — transfer built images to the target host directly.</p>';
+                    document.getElementById('deliveryCommands').textContent =
+`# Save image to tar
+docker save harness/tei-modified-default:TAG | gzip > tei-modified.tar.gz
+
+# Transfer to target and load
+# scp / SSM / manual upload, then:
+docker load < tei-modified.tar.gz`;
+                }
 
             } catch (e) {
                 document.getElementById('containerStatus').innerHTML = '<p style="color: var(--critical);">Failed to load status</p>';

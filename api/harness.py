@@ -71,6 +71,14 @@ def _log_action(action, category, details=None, artifacts=None):
     return entry
 
 
+def _get_tei_host(config, service='embedding'):
+    """Resolve TEI host supporting both split and legacy single-host config."""
+    tei = config.get('tei', {})
+    if service in tei and isinstance(tei[service], dict):
+        return tei[service].get('host', '')
+    return tei.get('host', 'http://localhost:8080')
+
+
 def _run_async_task(task_id, cmd, cwd, category, action_desc):
     """Run a shell command asynchronously and capture output."""
     _running_tasks[task_id] = {
@@ -142,6 +150,14 @@ def get_status():
         "corpus_built": os.path.exists(corpus_path),
         "timeline_entries": len(timeline_entries),
         "engagement": config.get("engagement", {}),
+        "access": config.get("access", {}),
+        "delivery": config.get("delivery", {}),
+        "telemetry": config.get("telemetry", {}),
+        "upstream_app": config.get("upstream_app", {}),
+        "tei_hosts": {
+            "embedding": _get_tei_host(config, "embedding"),
+            "reranker": _get_tei_host(config, "reranker"),
+        },
     })
 
 
@@ -294,8 +310,11 @@ def build_corpus():
 def run_fuzz():
     data = request.get_json() or {}
     config, _ = _load_config()
-    host = data.get('host', config.get('tei', {}).get('host', 'http://localhost:8080'))
     endpoint = data.get('endpoint', 'all')
+    if endpoint == 'rerank':
+        host = data.get('host') or _get_tei_host(config, 'reranker')
+    else:
+        host = data.get('host') or _get_tei_host(config, 'embedding')
     task_id = f"fuzz_{datetime.datetime.utcnow().strftime('%H%M%S')}"
     cmd = f"cd {HARNESS_ROOT} && python3 api-testing/scripts/fuzz_tei.py {host} --endpoint {endpoint}"
     t = threading.Thread(target=_run_async_task,
@@ -310,7 +329,7 @@ def run_fuzz():
 def run_auth_test():
     data = request.get_json() or {}
     config, _ = _load_config()
-    host = data.get('host', config.get('tei', {}).get('host', 'http://localhost:8080'))
+    host = data.get('host') or _get_tei_host(config, 'embedding')
     task_id = f"auth_{datetime.datetime.utcnow().strftime('%H%M%S')}"
     cmd = f"cd {HARNESS_ROOT} && python3 api-testing/scripts/auth_tests.py {host}"
     t = threading.Thread(target=_run_async_task,
@@ -486,6 +505,7 @@ def _default_checklist():
         {"id": "env", "phase": "Phase 0", "text": "Python environment & Docker configured", "done": False},
         {"id": "dirs", "phase": "Phase 0", "text": "Project directory structure created", "done": False},
         {"id": "aws", "phase": "Phase 0", "text": "AWS CLI configured with test profile", "done": False},
+        {"id": "access", "phase": "Phase 0", "text": "Target access method verified (SSM/SSH/direct)", "done": False},
         {"id": "models_dl", "phase": "Phase 1", "text": "Clean models downloaded", "done": False},
         {"id": "models_fp", "phase": "Phase 1", "text": "Clean models fingerprinted (SHA-256)", "done": False},
         {"id": "baselines", "phase": "Phase 1", "text": "Clean inference baselines generated", "done": False},
@@ -495,17 +515,20 @@ def _default_checklist():
         {"id": "img_arch", "phase": "Phase 2", "text": "Target container image architecture understood", "done": False},
         {"id": "img_clean", "phase": "Phase 2", "text": "Clean reproduction Dockerfile built", "done": False},
         {"id": "img_mod", "phase": "Phase 2", "text": "Modified Dockerfiles built and tested", "done": False},
-        {"id": "ecr_push", "phase": "Phase 2", "text": "ECR push workflow tested", "done": False},
+        {"id": "delivery", "phase": "Phase 2", "text": "Delivery pipeline tested (ECR/CI/manual)", "done": False},
         {"id": "cicd", "phase": "Phase 2", "text": "CI/CD injection approach planned", "done": False},
         {"id": "test_env", "phase": "Phase 3", "text": "Test environment confirmed ready", "done": False},
-        {"id": "vpn", "phase": "Phase 3", "text": "VPN/remote access verified", "done": False},
+        {"id": "target_conn", "phase": "Phase 3", "text": "Target host connectivity verified", "done": False},
         {"id": "creds", "phase": "Phase 3", "text": "Test credentials received and validated", "done": False},
         {"id": "egress", "phase": "Phase 3", "text": "Egress probe scripts tested", "done": False},
         {"id": "callback", "phase": "Phase 3", "text": "Callback infrastructure deployed", "done": False},
         {"id": "corpus", "phase": "Phase 4", "text": "Adversarial input corpus built", "done": False},
-        {"id": "fuzz", "phase": "Phase 4", "text": "API fuzzing scripts tested", "done": False},
+        {"id": "fuzz_embed", "phase": "Phase 4", "text": "Embedding endpoint fuzz tested", "done": False},
+        {"id": "fuzz_rerank", "phase": "Phase 4", "text": "Reranker endpoint fuzz tested", "done": False},
         {"id": "auth", "phase": "Phase 4", "text": "Auth test scripts ready", "done": False},
+        {"id": "upstream", "phase": "Phase 4", "text": "Upstream app dependency mapping complete", "done": False},
         {"id": "evidence", "phase": "Phase 5", "text": "Evidence capture scripts tested", "done": False},
         {"id": "timeline", "phase": "Phase 5", "text": "Timeline initialized", "done": False},
-        {"id": "telemetry", "phase": "Phase 5", "text": "Telemetry sources confirmed active", "done": False},
+        {"id": "telemetry", "phase": "Phase 5", "text": "Telemetry sources confirmed active (CloudWatch/flow logs)", "done": False},
+        {"id": "baseline_snap", "phase": "Phase 5", "text": "Pre-engagement baseline snapshot captured", "done": False},
     ]
