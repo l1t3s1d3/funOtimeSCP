@@ -1,0 +1,97 @@
+# AI Red Team Engagement 1 — Harness Configuration
+# Copy this to ai-test-harness/config/harness.yaml and fill in target-specific values.
+# DO NOT commit the filled-in harness.yaml — it is gitignored.
+
+engagement:
+  id: "ENG-001"
+  name: "AI Red Team Engagement 1"
+  start_date: "YYYY-MM-DD"
+  end_date: "YYYY-MM-DD"
+
+models:
+  embedding:
+    name: "TARGET_EMBEDDING_MODEL"
+    hf_repo: "ORG/MODEL_NAME"
+    local_dir: "models/clean/embedding"
+    modified_dir: "models/modified/embedding"
+  reranker:
+    name: "TARGET_RERANKER_MODEL"
+    hf_repo: "ORG/MODEL_NAME"
+    local_dir: "models/clean/reranker"
+    modified_dir: "models/modified/reranker"
+
+tei:
+  embedding:
+    host: "http://TARGET_HOST:EMBED_PORT"
+    endpoints: ["/embed", "/health", "/info"]
+  reranker:
+    host: "http://TARGET_HOST:RERANK_PORT"
+    endpoints: ["/rerank", "/health", "/info"]
+  common_endpoints: ["/metrics", "/openapi.json"]
+  docker_image: "BASE_TEI_IMAGE:TAG"
+  weight_paths:
+    embedding: "/opt/tei-data"
+    reranker: "/opt/tei-rerank-data"
+
+access:
+  method: "ssm"
+  instance_id: "i-XXXXXXXXXXXXXXXXX"
+  iam_role: "YOUR_ROLE_NAME"
+
+aws:
+  profile: "YOUR_AWS_PROFILE"
+  region: "TARGET_REGION"
+
+delivery:
+  type: "github_ci"
+  github_ci:
+    repo: "ORG/REPO_NAME"
+    playbook: "PLAYBOOK_PATH"
+    ci_platform: "circleci"
+    ci_context: "CI_CONTEXT_NAME"
+  current_ami: "ami-XXXXXXXXXXXXXXXXX"
+
+telemetry:
+  cloudwatch:
+    log_groups:
+      - "/stage/service-logs"
+      - "/aws/vpc/flow-logs/env/stage"
+
+upstream_app:
+  name: "Stage Application"
+  url: "https://stage.example.com"
+  test_endpoints:
+    - path: "/api/v1/catalog/is-mandatory-catalog/HIERARCHY_ID"
+      method: "GET"
+      description: "Mandatory catalog compliance check that calls TEI"
+  caller_ips:
+    - "10.x.x.x"
+    - "10.x.x.x"
+
+network:
+  callback_host: "YOUR_CALLBACK_HOST"
+  callback_port: 8888
+  target_subnets:
+    - "10.x.x.0/24"
+  probe_ports:
+    - 22
+    - 80
+    - 443
+    - 8080
+    - 8081
+    - 8082
+    - 8443
+
+evidence:
+  timeline_file: "evidence/timeline.jsonl"
+  artifacts_dir: "evidence/artifacts"
+  screenshots_dir: "evidence/screenshots"
+
+test_corpus:
+  embedding_inputs:
+    - "Sample catalog item description 1"
+    - "Sample catalog item description 2"
+    - "Sample catalog item description 3"
+  reranker_pairs:
+    - query: "sample query text"
+      candidate: "sample candidate text"

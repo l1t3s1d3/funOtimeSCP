@@ -30,7 +30,15 @@
 
     <div class="container">
         <h1 style="color: var(--accent-gold); margin-bottom: 0.5rem;">Deployment Checklist</h1>
-        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Track pre-engagement readiness. Every box should be checked before kickoff.</p>
+        <p style="color: var(--text-secondary); margin-bottom: 1.5rem;">Track pre-engagement readiness. Items marked [CONFIRM] require operator approval before execution.</p>
+
+        <!-- Engagement Preset Loader -->
+        <div class="card" style="margin-bottom: 1rem;" id="presetCard">
+            <div class="card-header">
+                <h2 class="card-title">Engagement Presets</h2>
+            </div>
+            <div id="presetList" style="display: flex; gap: 0.5rem; flex-wrap: wrap;"></div>
+        </div>
 
         <!-- Progress -->
         <div class="card" style="margin-bottom: 1.5rem;">
@@ -78,21 +86,11 @@
             document.getElementById('progressBar').style.width = `${pct}%`;
 
             let html = '';
-            const phaseDescriptions = {
-                'Phase 0': 'Base Workstation Setup',
-                'Phase 1': 'ML Model Lab (by Aug 20)',
-                'Phase 2': 'Container Pipeline (by Aug 21)',
-                'Phase 3': 'Network & API Tooling (by Aug 22 — No-Go Date)',
-                'Phase 4': 'API Testing Toolkit (by Aug 22)',
-                'Phase 5': 'Evidence & Coordination (by Aug 23)',
-            };
-
             for (const [phase, items] of Object.entries(phases)) {
                 const phaseDone = items.filter(i => i.done).length;
                 const phaseTotal = items.length;
-                const phaseDesc = phaseDescriptions[phase] || '';
                 html += `<div class="card checklist-phase">
-                    <h3>${phase}: ${phaseDesc}
+                    <h3>${escapeHtml(phase)}
                         <span style="font-size: 0.875rem; font-weight: normal; color: var(--text-secondary); margin-left: 0.5rem;">
                             (${phaseDone}/${phaseTotal})
                         </span>
@@ -118,6 +116,32 @@
             } catch (e) { showAlert('Failed to save checklist', 'error'); }
         }
 
+        async function loadPresets() {
+            try {
+                const data = await HarnessAPI.listEngagements();
+                const presets = data.engagements || [];
+                if (presets.length === 0) {
+                    document.getElementById('presetCard').style.display = 'none';
+                    return;
+                }
+                document.getElementById('presetList').innerHTML = presets.map(p =>
+                    `<button class="btn btn-secondary btn-sm" onclick="loadPreset('${p.id}')">
+                        ${escapeHtml(p.title || p.id)}
+                    </button>`
+                ).join('');
+            } catch (e) { document.getElementById('presetCard').style.display = 'none'; }
+        }
+
+        async function loadPreset(engId) {
+            if (!confirm(`Load checklist from engagement "${engId}"? This will replace the current checklist.`)) return;
+            try {
+                const r = await HarnessAPI.loadEngagementChecklist(engId);
+                showAlert(r.message, 'success');
+                loadChecklist();
+            } catch (e) { showAlert('Failed to load engagement checklist', 'error'); }
+        }
+
+        loadPresets();
         loadChecklist();
     </script>
 </body>
