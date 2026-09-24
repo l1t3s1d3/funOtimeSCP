@@ -5,11 +5,147 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vulnerabilities - VulnMS</title>
     <link rel="stylesheet" href="/static/css/style.css">
+    <style>
+        .bulk-actions {
+            display: none;
+            background: linear-gradient(135deg, var(--primary-blue) 0%, var(--primary-light) 100%);
+            border: 2px solid var(--accent-gold);
+            border-radius: 8px;
+            padding: 1rem 1.5rem;
+            margin-bottom: 1.5rem;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            animation: slideDown 0.2s ease-out;
+        }
+        .bulk-actions.visible { display: flex; }
+        @keyframes slideDown {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .bulk-actions-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+        .bulk-actions-right {
+            display: flex;
+            gap: 0.5rem;
+        }
+        .selected-count {
+            font-weight: 600;
+            color: var(--accent-gold);
+            font-size: 1rem;
+        }
+        .btn-gold {
+            background: linear-gradient(135deg, var(--accent-gold) 0%, #B8960F 100%);
+            color: var(--primary-dark);
+            font-weight: 600;
+        }
+        .btn-gold:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(212, 175, 55, 0.3);
+        }
+        .checkbox-cell {
+            width: 40px;
+            text-align: center;
+        }
+        .checkbox-cell input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            accent-color: var(--accent-gold);
+        }
+        .vuln-row { cursor: pointer; }
+        .vuln-row.selected { background: rgba(212, 175, 55, 0.08); }
+        .jira-badge {
+            display: inline-block;
+            padding: 0.15rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: 600;
+            background: rgba(49, 130, 206, 0.15);
+            color: var(--accent-blue);
+            border: 1px solid var(--accent-blue);
+            text-decoration: none;
+            margin-left: 0.25rem;
+        }
+        .jira-badge:hover { background: rgba(49, 130, 206, 0.3); }
+        .modal-content.modal-lg { max-width: 700px; }
+        .ticket-option {
+            background: var(--bg-dark);
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            padding: 1.25rem;
+            margin-bottom: 1rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .ticket-option:hover { border-color: var(--accent-blue); }
+        .ticket-option.selected { border-color: var(--accent-gold); background: rgba(212, 175, 55, 0.05); }
+        .ticket-option-header {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.5rem;
+        }
+        .ticket-option-header input[type="radio"] {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--accent-gold);
+        }
+        .ticket-option-title { font-weight: 600; font-size: 1.05rem; }
+        .ticket-option-desc { color: var(--text-secondary); font-size: 0.9rem; margin-left: 1.75rem; }
+        .vuln-summary {
+            background: var(--bg-dark);
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            margin: 1rem 0;
+            border: 1px solid var(--border);
+        }
+        .vuln-summary-title { color: var(--accent-gold); font-weight: 600; margin-bottom: 0.75rem; }
+        .severity-summary { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+        .severity-chip {
+            padding: 0.25rem 0.6rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.75rem;
+            margin-top: 1.5rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+        }
+        .result-card {
+            background: var(--bg-dark);
+            border-radius: 8px;
+            padding: 1.25rem;
+            margin-top: 1rem;
+            border: 1px solid var(--border);
+        }
+        .result-card h4 { color: var(--accent-gold); margin-bottom: 0.75rem; }
+        .result-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.9rem;
+        }
+        .result-item:last-child { border-bottom: none; }
+        .text-success { color: var(--low); }
+        .text-warning { color: var(--medium); }
+        .text-error { color: var(--critical); }
+        .text-info { color: var(--info); }
+        .card-header-actions { display: flex; gap: 0.5rem; align-items: center; }
+    </style>
 </head>
 <body>
     <header class="header">
         <nav class="nav">
-            <a href="/dashboard" class="logo">🔒 VulnMS</a>
+            <a href="/dashboard" class="logo">VulnMS</a>
             <ul class="nav-links">
                 <li><a href="/dashboard">Dashboard</a></li>
                 <li><a href="/vulnerabilities">Vulnerabilities</a></li>
@@ -26,6 +162,17 @@
 
     <div class="container">
         <h1 style="color: var(--accent-gold); margin-bottom: 2rem;">Vulnerabilities</h1>
+
+        <!-- Bulk Actions Toolbar -->
+        <div class="bulk-actions" id="bulkActions">
+            <div class="bulk-actions-left">
+                <span class="selected-count"><span id="selectedCount">0</span> selected</span>
+                <button class="btn btn-sm btn-secondary" onclick="clearSelection()">Clear Selection</button>
+            </div>
+            <div class="bulk-actions-right">
+                <button class="btn btn-sm btn-gold" onclick="openTicketModal()">Create Jira Ticket</button>
+            </div>
+        </div>
 
         <!-- Filters -->
         <div class="card">
@@ -54,6 +201,8 @@
                         <option value="resolved">Resolved</option>
                         <option value="false-positive">False Positive</option>
                         <option value="risk-accepted">Risk Accepted</option>
+                        <option value="delayed">Delayed</option>
+                        <option value="poamd">POAMd</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -73,6 +222,8 @@
                         <option value="Wiz">Wiz</option>
                         <option value="Veracode">Veracode</option>
                         <option value="Arctic Wolf">Arctic Wolf</option>
+                        <option value="Crowdstrike">Crowdstrike</option>
+                        <option value="Burp">Burp</option>
                     </select>
                 </div>
             </div>
@@ -83,12 +234,18 @@
         <div class="card">
             <div class="card-header">
                 <h3 class="card-title">Results: <span id="totalCount">0</span></h3>
-                <button class="btn btn-secondary btn-sm" onclick="exportCSV()">Export CSV</button>
+                <div class="card-header-actions">
+                    <button class="btn btn-secondary btn-sm" onclick="selectAllOnPage()">Select Page</button>
+                    <button class="btn btn-secondary btn-sm" onclick="exportCSV()">Export CSV</button>
+                </div>
             </div>
             <div class="table-container">
                 <table class="table">
                     <thead>
                         <tr>
+                            <th class="checkbox-cell">
+                                <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)" title="Select all on page">
+                            </th>
                             <th>CVE/ID</th>
                             <th>Title</th>
                             <th>Severity</th>
@@ -96,14 +253,76 @@
                             <th>Environment</th>
                             <th>Asset</th>
                             <th>Date Found</th>
+                            <th>Jira</th>
                         </tr>
                     </thead>
                     <tbody id="vulnTableBody">
-                        <tr><td colspan="7" style="text-align: center;">Loading...</td></tr>
+                        <tr><td colspan="9" style="text-align: center;">Loading...</td></tr>
                     </tbody>
                 </table>
             </div>
             <div class="pagination" id="pagination"></div>
+        </div>
+    </div>
+
+    <!-- Ticket Creation Modal -->
+    <div class="modal" id="ticketModal">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h3 class="modal-title" id="ticketModalTitle">Create Jira Ticket</h3>
+                <button class="modal-close" onclick="closeTicketModal()">&times;</button>
+            </div>
+            <div id="ticketModalBody">
+                <!-- Vulnerability Summary -->
+                <div class="vuln-summary">
+                    <div class="vuln-summary-title">Selected Vulnerabilities (<span id="modalVulnCount">0</span>)</div>
+                    <div class="severity-summary" id="modalSeveritySummary"></div>
+                </div>
+
+                <!-- Ticket Options -->
+                <div id="ticketOptions">
+                    <div class="ticket-option selected" onclick="selectTicketOption('individual')" id="optionIndividual">
+                        <div class="ticket-option-header">
+                            <input type="radio" name="ticketType" value="individual" checked>
+                            <span class="ticket-option-title">Individual Tickets</span>
+                        </div>
+                        <div class="ticket-option-desc">
+                            Create a separate Jira ticket for each selected vulnerability. Best when each vulnerability needs independent tracking and assignment.
+                        </div>
+                    </div>
+                    <div class="ticket-option" onclick="selectTicketOption('grouped')" id="optionGrouped">
+                        <div class="ticket-option-header">
+                            <input type="radio" name="ticketType" value="grouped">
+                            <span class="ticket-option-title">Grouped Ticket</span>
+                        </div>
+                        <div class="ticket-option-desc">
+                            Create a single Jira ticket containing all selected vulnerabilities. Best for bulk remediation where multiple vulnerabilities share the same fix or assignee.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Results Area (hidden initially) -->
+                <div id="ticketResults" style="display: none;"></div>
+            </div>
+            <div class="modal-actions" id="ticketModalActions">
+                <button class="btn btn-secondary" onclick="closeTicketModal()">Cancel</button>
+                <button class="btn btn-gold" id="createTicketBtn" onclick="createTickets()">Create Ticket(s)</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Single Vulnerability Detail Modal -->
+    <div class="modal" id="detailModal">
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h3 class="modal-title" id="detailTitle">Vulnerability Details</h3>
+                <button class="modal-close" onclick="closeDetailModal()">&times;</button>
+            </div>
+            <div id="detailBody"></div>
+            <div class="modal-actions">
+                <button class="btn btn-secondary" onclick="closeDetailModal()">Close</button>
+                <button class="btn btn-gold" id="singleTicketBtn" onclick="createSingleTicketFromDetail()">Create Jira Ticket</button>
+            </div>
         </div>
     </div>
 
@@ -117,6 +336,11 @@
 
         let currentPage = 1;
         let currentFilters = {};
+        let selectedVulns = new Map();
+        let currentPageVulns = [];
+        let detailVulnId = null;
+
+        // --- Data Loading ---
 
         async function loadVulnerabilities() {
             const filters = {
@@ -127,9 +351,11 @@
 
             try {
                 const data = await VulnerabilityAPI.list(filters);
-                displayVulnerabilities(data.vulnerabilities || []);
+                currentPageVulns = data.vulnerabilities || [];
+                displayVulnerabilities(currentPageVulns);
                 displayPagination(data);
                 document.getElementById('totalCount').textContent = data.total || 0;
+                updateSelectAllState();
             } catch (error) {
                 console.error('Error loading vulnerabilities:', error);
                 showAlert('Error loading vulnerabilities', 'error');
@@ -139,22 +365,360 @@
         function displayVulnerabilities(vulnerabilities) {
             const tbody = document.getElementById('vulnTableBody');
             if (vulnerabilities.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">No vulnerabilities found</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="9" style="text-align: center;">No vulnerabilities found</td></tr>';
                 return;
             }
 
-            tbody.innerHTML = vulnerabilities.map(v => `
-                <tr style="cursor: pointer;" onclick="window.location.href='/vulnerabilities#${v.id}'">
-                    <td><strong>${v.cve_id || v.source_id || 'N/A'}</strong></td>
-                    <td>${v.title}</td>
-                    <td><span class="badge ${getSeverityBadgeClass(v.severity)}">${v.severity}</span></td>
-                    <td><span class="badge ${getStatusBadgeClass(v.status)}">${v.status}</span></td>
-                    <td>${v.environment || 'Unknown'}</td>
-                    <td>${v.asset_name || 'N/A'}</td>
-                    <td>${formatDate(v.date_found)}</td>
-                </tr>
-            `).join('');
+            tbody.innerHTML = vulnerabilities.map(v => {
+                const isSelected = selectedVulns.has(v.id);
+                const jiraInfo = getJiraInfo(v);
+                return `
+                <tr class="vuln-row ${isSelected ? 'selected' : ''}" id="row-${v.id}">
+                    <td class="checkbox-cell" onclick="event.stopPropagation()">
+                        <input type="checkbox" ${isSelected ? 'checked' : ''}
+                            onchange="toggleVulnSelection(${v.id}, this.checked)"
+                            title="Select vulnerability">
+                    </td>
+                    <td onclick="openDetailModal(${v.id})"><strong>${escapeHtml(v.cve_id || v.source_id || 'N/A')}</strong></td>
+                    <td onclick="openDetailModal(${v.id})">${escapeHtml(truncate(v.title, 60))}</td>
+                    <td onclick="openDetailModal(${v.id})"><span class="badge ${getSeverityBadgeClass(v.severity)}">${escapeHtml(v.severity)}</span></td>
+                    <td onclick="openDetailModal(${v.id})"><span class="badge ${getStatusBadgeClass(v.status)}">${escapeHtml(v.status)}</span></td>
+                    <td onclick="openDetailModal(${v.id})">${escapeHtml(v.environment || 'Unknown')}</td>
+                    <td onclick="openDetailModal(${v.id})">${escapeHtml(truncate(v.asset_name || 'N/A', 30))}</td>
+                    <td onclick="openDetailModal(${v.id})">${formatDate(v.date_found)}</td>
+                    <td>${jiraInfo}</td>
+                </tr>`;
+            }).join('');
         }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        function truncate(str, max) {
+            if (!str) return '';
+            return str.length > max ? str.substring(0, max) + '...' : str;
+        }
+
+        function getJiraInfo(v) {
+            if (v.jira_tickets && v.jira_tickets.length > 0) {
+                return v.jira_tickets.map(t =>
+                    t.jira_url
+                        ? `<a href="${escapeHtml(t.jira_url)}" target="_blank" class="jira-badge" onclick="event.stopPropagation()" title="${escapeHtml(t.status)}">${escapeHtml(t.jira_key)}</a>`
+                        : `<span class="jira-badge">${escapeHtml(t.jira_key)}</span>`
+                ).join(' ');
+            }
+            return '<span style="color: var(--text-secondary); font-size: 0.8rem;">--</span>';
+        }
+
+        // --- Selection Logic ---
+
+        function toggleVulnSelection(id, checked) {
+            if (checked) {
+                const vuln = currentPageVulns.find(v => v.id === id);
+                if (vuln) selectedVulns.set(id, vuln);
+            } else {
+                selectedVulns.delete(id);
+            }
+            updateSelectionUI();
+        }
+
+        function toggleSelectAll(checkbox) {
+            currentPageVulns.forEach(v => {
+                if (checkbox.checked) {
+                    selectedVulns.set(v.id, v);
+                } else {
+                    selectedVulns.delete(v.id);
+                }
+            });
+            updateSelectionUI();
+            displayVulnerabilities(currentPageVulns);
+        }
+
+        function selectAllOnPage() {
+            currentPageVulns.forEach(v => selectedVulns.set(v.id, v));
+            updateSelectionUI();
+            displayVulnerabilities(currentPageVulns);
+        }
+
+        function clearSelection() {
+            selectedVulns.clear();
+            updateSelectionUI();
+            displayVulnerabilities(currentPageVulns);
+        }
+
+        function updateSelectionUI() {
+            const count = selectedVulns.size;
+            document.getElementById('selectedCount').textContent = count;
+            const toolbar = document.getElementById('bulkActions');
+            if (count > 0) {
+                toolbar.classList.add('visible');
+            } else {
+                toolbar.classList.remove('visible');
+            }
+            updateSelectAllState();
+        }
+
+        function updateSelectAllState() {
+            const checkbox = document.getElementById('selectAllCheckbox');
+            const allSelected = currentPageVulns.length > 0 && currentPageVulns.every(v => selectedVulns.has(v.id));
+            const someSelected = currentPageVulns.some(v => selectedVulns.has(v.id));
+            checkbox.checked = allSelected;
+            checkbox.indeterminate = someSelected && !allSelected;
+        }
+
+        // --- Ticket Modal ---
+
+        function openTicketModal() {
+            if (selectedVulns.size === 0) {
+                showAlert('Please select at least one vulnerability', 'error');
+                return;
+            }
+
+            document.getElementById('modalVulnCount').textContent = selectedVulns.size;
+            document.getElementById('ticketModalTitle').textContent =
+                selectedVulns.size === 1 ? 'Create Jira Ticket' : `Create Jira Ticket (${selectedVulns.size} vulnerabilities)`;
+
+            const severityCounts = {};
+            selectedVulns.forEach(v => {
+                severityCounts[v.severity] = (severityCounts[v.severity] || 0) + 1;
+            });
+            const summaryDiv = document.getElementById('modalSeveritySummary');
+            summaryDiv.innerHTML = Object.entries(severityCounts)
+                .sort((a, b) => {
+                    const order = ['Critical', 'High', 'Medium', 'Low', 'Informational'];
+                    return order.indexOf(a[0]) - order.indexOf(b[0]);
+                })
+                .map(([sev, count]) => `<span class="severity-chip badge ${getSeverityBadgeClass(sev)}">${count} ${escapeHtml(sev)}</span>`)
+                .join('');
+
+            const groupedOption = document.getElementById('optionGrouped');
+            if (selectedVulns.size === 1) {
+                groupedOption.style.display = 'none';
+                selectTicketOption('individual');
+            } else {
+                groupedOption.style.display = 'block';
+            }
+
+            document.getElementById('ticketOptions').style.display = 'block';
+            document.getElementById('ticketResults').style.display = 'none';
+            document.getElementById('ticketResults').innerHTML = '';
+            document.getElementById('createTicketBtn').disabled = false;
+            document.getElementById('createTicketBtn').textContent = 'Create Ticket(s)';
+            document.getElementById('createTicketBtn').style.display = '';
+            document.getElementById('ticketModalActions').querySelector('.btn-secondary').textContent = 'Cancel';
+
+            document.getElementById('ticketModal').classList.add('active');
+        }
+
+        function closeTicketModal() {
+            document.getElementById('ticketModal').classList.remove('active');
+        }
+
+        function selectTicketOption(type) {
+            document.querySelectorAll('.ticket-option').forEach(el => el.classList.remove('selected'));
+            document.querySelectorAll('input[name="ticketType"]').forEach(el => el.checked = false);
+
+            if (type === 'individual') {
+                document.getElementById('optionIndividual').classList.add('selected');
+                document.getElementById('optionIndividual').querySelector('input').checked = true;
+            } else {
+                document.getElementById('optionGrouped').classList.add('selected');
+                document.getElementById('optionGrouped').querySelector('input').checked = true;
+            }
+        }
+
+        async function createTickets() {
+            const ticketType = document.querySelector('input[name="ticketType"]:checked')?.value || 'individual';
+            const ids = Array.from(selectedVulns.keys());
+            const btn = document.getElementById('createTicketBtn');
+
+            btn.disabled = true;
+            btn.textContent = 'Creating...';
+
+            try {
+                let result;
+                if (ticketType === 'grouped') {
+                    result = await JiraAPI.createGroupedTicket(ids);
+                    displayGroupedResult(result);
+                } else {
+                    result = await JiraAPI.bulkCreate(ids);
+                    displayBulkResult(result);
+                }
+
+                document.getElementById('ticketOptions').style.display = 'none';
+                document.getElementById('ticketResults').style.display = 'block';
+                document.getElementById('ticketModalActions').querySelector('.btn-secondary').textContent = 'Close';
+                btn.style.display = 'none';
+
+                loadVulnerabilities();
+            } catch (error) {
+                console.error('Error creating tickets:', error);
+                showAlert('Error creating Jira ticket(s): ' + error.message, 'error');
+                btn.disabled = false;
+                btn.textContent = 'Create Ticket(s)';
+            }
+        }
+
+        function displayGroupedResult(result) {
+            const div = document.getElementById('ticketResults');
+            const ticket = result.ticket || {};
+            div.innerHTML = `
+                <div class="result-card">
+                    <h4 class="text-success">Grouped Ticket Created</h4>
+                    <div class="result-item">
+                        <span>Ticket Key</span>
+                        <span>${ticket.jira_url
+                            ? `<a href="${escapeHtml(ticket.jira_url)}" target="_blank" class="jira-badge" style="font-size: 0.85rem;">${escapeHtml(ticket.jira_key)}</a>`
+                            : escapeHtml(ticket.jira_key || 'N/A')}</span>
+                    </div>
+                    <div class="result-item">
+                        <span>Status</span>
+                        <span>${escapeHtml(ticket.status || 'Open')}</span>
+                    </div>
+                    <div class="result-item">
+                        <span>Vulnerabilities Included</span>
+                        <span class="text-success">${ticket.vulnerability_count || selectedVulns.size}</span>
+                    </div>
+                    <p style="margin-top: 1rem; color: var(--text-secondary); font-size: 0.9rem;">${escapeHtml(result.message || '')}</p>
+                </div>`;
+        }
+
+        function displayBulkResult(result) {
+            const div = document.getElementById('ticketResults');
+            const r = result.results || {};
+            const created = r.created || [];
+            const skipped = r.skipped || [];
+            const errors = r.errors || [];
+
+            let html = '<div class="result-card"><h4>Ticket Creation Results</h4>';
+
+            if (created.length > 0) {
+                html += `<div class="result-item"><span class="text-success">Created</span><span class="text-success">${created.length} ticket(s)</span></div>`;
+                created.forEach(c => {
+                    html += `<div class="result-item" style="padding-left: 1rem;">
+                        <span>Vulnerability #${c.vulnerability_id}</span>
+                        <span class="jira-badge">${escapeHtml(c.jira_key)}</span>
+                    </div>`;
+                });
+            }
+
+            if (skipped.length > 0) {
+                html += `<div class="result-item"><span class="text-warning">Skipped</span><span class="text-warning">${skipped.length}</span></div>`;
+                skipped.forEach(s => {
+                    html += `<div class="result-item" style="padding-left: 1rem;">
+                        <span>Vulnerability #${s.vulnerability_id}</span>
+                        <span style="color: var(--text-secondary);">${escapeHtml(s.reason)}</span>
+                    </div>`;
+                });
+            }
+
+            if (errors.length > 0) {
+                html += `<div class="result-item"><span class="text-error">Errors</span><span class="text-error">${errors.length}</span></div>`;
+                errors.forEach(e => {
+                    html += `<div class="result-item" style="padding-left: 1rem;">
+                        <span>Vulnerability #${e.vulnerability_id}</span>
+                        <span class="text-error">${escapeHtml(e.error)}</span>
+                    </div>`;
+                });
+            }
+
+            html += `<p style="margin-top: 1rem; color: var(--text-secondary); font-size: 0.9rem;">${escapeHtml(result.message || '')}</p></div>`;
+            div.innerHTML = html;
+        }
+
+        // --- Detail Modal ---
+
+        async function openDetailModal(id) {
+            detailVulnId = id;
+            try {
+                const v = await VulnerabilityAPI.get(id);
+                const hasTicket = v.jira_tickets && v.jira_tickets.length > 0;
+
+                document.getElementById('detailTitle').textContent = v.title || 'Vulnerability Details';
+                document.getElementById('singleTicketBtn').style.display = hasTicket ? 'none' : '';
+                document.getElementById('singleTicketBtn').disabled = false;
+                document.getElementById('singleTicketBtn').textContent = 'Create Jira Ticket';
+
+                document.getElementById('detailBody').innerHTML = `
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <div>
+                            <div class="form-group">
+                                <label class="form-label">CVE ID</label>
+                                <div>${escapeHtml(v.cve_id || 'N/A')}</div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Source</label>
+                                <div>${escapeHtml(v.source)} (${escapeHtml(v.source_id)})</div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Severity</label>
+                                <div><span class="badge ${getSeverityBadgeClass(v.severity)}">${escapeHtml(v.severity)}</span>
+                                    ${v.cvss_score ? ` (CVSS: ${v.cvss_score})` : ''}</div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Status</label>
+                                <div><span class="badge ${getStatusBadgeClass(v.status)}">${escapeHtml(v.status)}</span></div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="form-group">
+                                <label class="form-label">Asset</label>
+                                <div>${escapeHtml(v.asset_name || 'N/A')} ${v.asset_type ? `(${escapeHtml(v.asset_type)})` : ''}</div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Environment</label>
+                                <div>${escapeHtml(v.environment || 'Unknown')}</div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Date Found</label>
+                                <div>${formatDate(v.date_found)}</div>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Assigned To</label>
+                                <div>${escapeHtml(v.assigned_to || 'Unassigned')}</div>
+                            </div>
+                        </div>
+                    </div>
+                    ${v.description ? `<div class="form-group"><label class="form-label">Description</label><div style="background: var(--bg-dark); padding: 0.75rem; border-radius: 4px; max-height: 150px; overflow-y: auto; font-size: 0.9rem;">${escapeHtml(v.description)}</div></div>` : ''}
+                    ${hasTicket ? `<div class="form-group"><label class="form-label">Jira Tickets</label><div>${v.jira_tickets.map(t => t.jira_url ? `<a href="${escapeHtml(t.jira_url)}" target="_blank" class="jira-badge" style="font-size: 0.85rem;">${escapeHtml(t.jira_key)} (${escapeHtml(t.status)})</a>` : `<span class="jira-badge">${escapeHtml(t.jira_key)} (${escapeHtml(t.status)})</span>`).join(' ')}</div></div>` : ''}
+                `;
+
+                document.getElementById('detailModal').classList.add('active');
+            } catch (error) {
+                console.error('Error loading vulnerability details:', error);
+                showAlert('Error loading vulnerability details', 'error');
+            }
+        }
+
+        function closeDetailModal() {
+            document.getElementById('detailModal').classList.remove('active');
+            detailVulnId = null;
+        }
+
+        async function createSingleTicketFromDetail() {
+            if (!detailVulnId) return;
+            const btn = document.getElementById('singleTicketBtn');
+            btn.disabled = true;
+            btn.textContent = 'Creating...';
+
+            try {
+                const result = await JiraAPI.createTicket(detailVulnId);
+                showAlert('Jira ticket created: ' + (result.ticket?.jira_key || ''), 'success');
+                closeDetailModal();
+                loadVulnerabilities();
+            } catch (error) {
+                console.error('Error creating ticket:', error);
+                showAlert('Error creating Jira ticket: ' + error.message, 'error');
+                btn.disabled = false;
+                btn.textContent = 'Create Jira Ticket';
+            }
+        }
+
+        // --- Pagination & Filters ---
 
         function displayPagination(data) {
             const pagination = document.getElementById('pagination');
@@ -164,9 +728,15 @@
             let html = '';
             html += `<button onclick="changePage(${current - 1})" ${current === 1 ? 'disabled' : ''}>Previous</button>`;
 
-            for (let i = 1; i <= Math.min(pages, 10); i++) {
+            let startPage = Math.max(1, current - 4);
+            let endPage = Math.min(pages, startPage + 9);
+            if (endPage - startPage < 9) startPage = Math.max(1, endPage - 9);
+
+            if (startPage > 1) html += `<button onclick="changePage(1)">1</button><button disabled>...</button>`;
+            for (let i = startPage; i <= endPage; i++) {
                 html += `<button onclick="changePage(${i})" class="${i === current ? 'active' : ''}">${i}</button>`;
             }
+            if (endPage < pages) html += `<button disabled>...</button><button onclick="changePage(${pages})">${pages}</button>`;
 
             html += `<button onclick="changePage(${current + 1})" ${current === pages ? 'disabled' : ''}>Next</button>`;
             pagination.innerHTML = html;
@@ -201,6 +771,21 @@
         function exportCSV() {
             ReportsAPI.exportCSV(currentFilters);
         }
+
+        // Close modals on outside click
+        document.querySelectorAll('.modal').forEach(modal => {
+            modal.addEventListener('click', function(e) {
+                if (e.target === this) {
+                    this.classList.remove('active');
+                }
+            });
+        });
+
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                document.querySelectorAll('.modal.active').forEach(m => m.classList.remove('active'));
+            }
+        });
 
         loadVulnerabilities();
     </script>

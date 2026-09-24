@@ -131,6 +131,14 @@ const JiraAPI = {
         return await response.json();
     },
 
+    async createGroupedTicket(vulnerabilityIds) {
+        const response = await apiRequest('/jira/create-grouped', {
+            method: 'POST',
+            body: JSON.stringify({ vulnerability_ids: vulnerabilityIds })
+        });
+        return await response.json();
+    },
+
     async listTickets(filters = {}) {
         const params = new URLSearchParams(filters);
         const response = await apiRequest(`/jira/tickets?${params}`);
