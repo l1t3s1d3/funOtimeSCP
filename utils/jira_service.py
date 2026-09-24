@@ -203,6 +203,132 @@ class JiraService:
 
         return "\n".join(lines)
 
+    def create_grouped_ticket(self, vulnerabilities: list, project_key: Optional[str] = None) -> Dict[str, Any]:
+        """Create a single Jira ticket for multiple vulnerabilities"""
+        if not self.is_configured():
+            raise Exception("Jira is not configured. Check JIRA_URL, JIRA_EMAIL, and JIRA_API_TOKEN environment variables.")
+
+        if not vulnerabilities:
+            raise Exception("No vulnerabilities provided for ticket creation")
+
+        try:
+            project = project_key or self.project_key
+            title = self._build_grouped_ticket_title(vulnerabilities)
+            description = self._build_grouped_ticket_description(vulnerabilities)
+            highest_severity = self._get_highest_severity(vulnerabilities)
+
+            issue_dict = {
+                'project': {'key': project},
+                'summary': title,
+                'description': description,
+                'issuetype': {'name': 'Bug'},
+            }
+
+            priority = self._map_severity_to_priority(highest_severity)
+            if priority:
+                issue_dict['priority'] = {'name': priority}
+
+            new_issue = self.client.create_issue(fields=issue_dict)
+
+            return {
+                'jira_key': new_issue.key,
+                'jira_id': new_issue.id,
+                'jira_url': f"{self.jira_url}/browse/{new_issue.key}",
+                'status': 'Open',
+                'assignee': None
+            }
+
+        except JIRAError as e:
+            raise Exception(f"Failed to create grouped Jira ticket: {str(e)}")
+
+    def _build_grouped_ticket_title(self, vulnerabilities: list) -> str:
+        """Build Jira ticket title for multiple vulnerabilities"""
+        count = len(vulnerabilities)
+        severity_counts = {}
+        for v in vulnerabilities:
+            sev = v.get('severity', 'Unknown')
+            severity_counts[sev] = severity_counts.get(sev, 0) + 1
+
+        severity_order = ['Critical', 'High', 'Medium', 'Low', 'Informational']
+        severity_parts = []
+        for sev in severity_order:
+            if sev in severity_counts:
+                severity_parts.append(f"{severity_counts[sev]} {sev}")
+        for sev, c in sorted(severity_counts.items()):
+            if sev not in severity_order:
+                severity_parts.append(f"{c} {sev}")
+
+        severity_summary = ', '.join(severity_parts)
+        return f"Bulk Remediation: {count} Vulnerabilities ({severity_summary})"
+
+    def _build_grouped_ticket_description(self, vulnerabilities: list) -> str:
+        """Build Jira ticket description for multiple vulnerabilities"""
+        lines = []
+        lines.append("*Bulk Vulnerability Remediation Ticket*")
+        lines.append("")
+        lines.append(f"This ticket tracks remediation of {len(vulnerabilities)} vulnerabilities.")
+        lines.append("")
+
+        severity_counts = {}
+        for v in vulnerabilities:
+            sev = v.get('severity', 'Unknown')
+            severity_counts[sev] = severity_counts.get(sev, 0) + 1
+
+        lines.append("*Summary by Severity:*")
+        for severity in ['Critical', 'High', 'Medium', 'Low', 'Informational']:
+            if severity in severity_counts:
+                lines.append(f"- {severity}: {severity_counts[severity]}")
+        lines.append("")
+
+        env_counts = {}
+        for v in vulnerabilities:
+            env = v.get('environment', 'Unknown')
+            env_counts[env] = env_counts.get(env, 0) + 1
+
+        if env_counts:
+            lines.append("*Summary by Environment:*")
+            for env, count in sorted(env_counts.items()):
+                lines.append(f"- {env}: {count}")
+            lines.append("")
+
+        lines.append("*Vulnerabilities:*")
+        lines.append("")
+
+        for idx, v in enumerate(vulnerabilities, 1):
+            lines.append(f"h4. {idx}. {v.get('title', 'Unknown Vulnerability')}")
+            lines.append(f"*Severity:* {v.get('severity', 'Unknown')}")
+
+            if v.get('cve_id'):
+                lines.append(f"*CVE:* {v['cve_id']}")
+            if v.get('cvss_score'):
+                lines.append(f"*CVSS Score:* {v['cvss_score']}")
+
+            lines.append(f"*Asset:* {v.get('asset_name', 'Unknown')}")
+            lines.append(f"*Environment:* {v.get('environment', 'Unknown')}")
+            lines.append(f"*Source:* {v.get('source', 'Unknown')}")
+
+            if v.get('description'):
+                desc = v['description']
+                if len(desc) > 200:
+                    desc = desc[:200] + "..."
+                lines.append(f"*Description:* {desc}")
+
+            if v.get('source_url'):
+                lines.append(f"*Source Link:* {v['source_url']}")
+            lines.append("")
+
+        lines.append(f"_Created from vulnerability management system on {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC_")
+        return "\n".join(lines)
+
+    def _get_highest_severity(self, vulnerabilities: list) -> str:
+        """Determine the highest severity from a list of vulnerabilities"""
+        severity_order = ['Critical', 'High', 'Medium', 'Low', 'Informational']
+        for severity in severity_order:
+            for v in vulnerabilities:
+                if v.get('severity') == severity:
+                    return severity
+        return 'Medium'
+
     def _map_severity_to_priority(self, severity: str) -> Optional[str]:
         """Map vulnerability severity to Jira priority"""
         severity_map = {

@@ -3,7 +3,7 @@ from datetime import datetime
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from extensions import db
-from models import Vulnerability, JiraTicket
+from models import Vulnerability, JiraTicket, VulnerabilityJiraTicket
 from utils.jira_service import JiraService
 
 jira_bp = Blueprint('jira', __name__, url_prefix='/api/jira')
@@ -176,6 +176,66 @@ def bulk_create_tickets():
         'message': 'Bulk ticket creation completed',
         'results': results
     }), 200
+
+
+@jira_bp.route('/create-grouped', methods=['POST'])
+@jwt_required()
+def create_grouped_ticket():
+    """Create a single Jira ticket for multiple vulnerabilities"""
+    current_user = get_jwt_identity()
+    data = request.get_json()
+
+    if 'vulnerability_ids' not in data:
+        return jsonify({'error': 'Missing vulnerability_ids field'}), 400
+
+    vulnerability_ids = data['vulnerability_ids']
+    if not vulnerability_ids:
+        return jsonify({'error': 'No vulnerabilities provided'}), 400
+
+    vulnerabilities = Vulnerability.query.filter(Vulnerability.id.in_(vulnerability_ids)).all()
+    if len(vulnerabilities) != len(vulnerability_ids):
+        return jsonify({'error': 'Some vulnerabilities not found'}), 404
+
+    try:
+        jira_service = JiraService()
+        vuln_dicts = [v.to_dict() for v in vulnerabilities]
+        ticket_data = jira_service.create_grouped_ticket(vuln_dicts)
+
+        title = f"Bulk Remediation: {len(vulnerabilities)} Vulnerabilities"
+
+        ticket = JiraTicket(
+            ticket_type='grouped',
+            jira_key=ticket_data['jira_key'],
+            jira_id=ticket_data['jira_id'],
+            jira_url=ticket_data['jira_url'],
+            project_key=jira_service.project_key,
+            title=title,
+            description=f"Grouped ticket for {len(vulnerabilities)} vulnerabilities",
+            status=ticket_data['status'],
+            created_by=current_user,
+            last_synced_at=datetime.utcnow()
+        )
+
+        db.session.add(ticket)
+        db.session.flush()
+
+        for vuln in vulnerabilities:
+            association = VulnerabilityJiraTicket(
+                vulnerability_id=vuln.id,
+                jira_ticket_id=ticket.id
+            )
+            db.session.add(association)
+
+        db.session.commit()
+
+        return jsonify({
+            'message': f'Grouped Jira ticket created successfully for {len(vulnerabilities)} vulnerabilities',
+            'ticket': ticket.to_dict()
+        }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
 
 
 @jira_bp.route('/tickets', methods=['GET'])

@@ -3,6 +3,7 @@ from .user import User
 from .jira_ticket import JiraTicket
 from .source import VulnerabilitySource
 from .import_log import ImportLog, ImportError
+from .vulnerability_jira_ticket import VulnerabilityJiraTicket
 
 __all__ = [
     'Vulnerability',
@@ -11,5 +12,6 @@ __all__ = [
     'JiraTicket',
     'VulnerabilitySource',
     'ImportLog',
-    'ImportError'
+    'ImportError',
+    'VulnerabilityJiraTicket'
 ]
