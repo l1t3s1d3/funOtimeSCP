@@ -102,6 +102,14 @@ const HarnessAPI = {
         });
         return r.json();
     },
+    async listEngagements() {
+        const r = await apiRequest('/harness/engagements');
+        return r.json();
+    },
+    async loadEngagementChecklist(engId) {
+        const r = await apiRequest(`/harness/engagements/${engId}/load-checklist`, { method: 'POST' });
+        return r.json();
+    },
 };
 
 function escapeHtml(str) {

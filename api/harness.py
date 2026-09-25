@@ -478,6 +478,42 @@ def get_task(task_id):
 # ── Checklist ────────────────────────────────────────────────────
 
 CHECKLIST_PATH = os.path.join(HARNESS_ROOT, 'config', 'checklist.json')
+ENGAGEMENTS_DIR = os.path.join(HARNESS_ROOT, 'engagements')
+
+
+@harness_bp.route('/engagements', methods=['GET'])
+@jwt_required()
+def list_engagements():
+    """List available engagement presets."""
+    engagements = []
+    if os.path.isdir(ENGAGEMENTS_DIR):
+        for name in sorted(os.listdir(ENGAGEMENTS_DIR)):
+            eng_dir = os.path.join(ENGAGEMENTS_DIR, name)
+            if os.path.isdir(eng_dir):
+                eng = {"id": name, "files": os.listdir(eng_dir)}
+                plan = os.path.join(eng_dir, 'test_plan.md')
+                if os.path.exists(plan):
+                    with open(plan) as f:
+                        first_line = f.readline().strip().lstrip('# ')
+                    eng["title"] = first_line
+                engagements.append(eng)
+    return jsonify({"engagements": engagements})
+
+
+@harness_bp.route('/engagements/<eng_id>/load-checklist', methods=['POST'])
+@jwt_required()
+def load_engagement_checklist(eng_id):
+    """Load an engagement-specific checklist as the active checklist."""
+    src = os.path.join(ENGAGEMENTS_DIR, eng_id, 'checklist.json')
+    if not os.path.exists(src) or '..' in eng_id:
+        return jsonify({"error": "Engagement checklist not found"}), 404
+    os.makedirs(os.path.dirname(CHECKLIST_PATH), exist_ok=True)
+    with open(src) as f:
+        data = json.load(f)
+    with open(CHECKLIST_PATH, 'w') as f:
+        json.dump(data, f, indent=2)
+    _log_action(f"Loaded checklist from engagement: {eng_id}", "setup")
+    return jsonify({"message": f"Checklist loaded from {eng_id}", "items": len(data.get('items', []))})
 
 
 @harness_bp.route('/checklist', methods=['GET'])
