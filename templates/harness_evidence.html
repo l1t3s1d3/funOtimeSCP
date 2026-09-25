@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Evidence Timeline - AI Test Harness</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/harness.css">
+</head>
+<body>
+    <header class="header">
+        <nav class="nav">
+            <a href="/harness" class="logo">AI Test Harness</a>
+            <ul class="nav-links">
+                <li><a href="/harness">Dashboard</a></li>
+                <li><a href="/harness/config">Configure</a></li>
+                <li><a href="/harness/models">Model Lab</a></li>
+                <li><a href="/harness/api-testing">API Testing</a></li>
+                <li><a href="/harness/network">Network</a></li>
+                <li><a href="/harness/containers">Containers</a></li>
+                <li><a href="/harness/evidence">Evidence</a></li>
+                <li><a href="/harness/checklist">Checklist</a></li>
+            </ul>
+            <div class="user-menu">
+                <a href="/dashboard" class="btn btn-secondary btn-sm">Back to VulnMS</a>
+                <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
+            </div>
+        </nav>
+    </header>
+
+    <div class="container">
+        <h1 style="color: var(--accent-gold); margin-bottom: 2rem;">Evidence Timeline</h1>
+
+        <!-- Log Action -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Log Action</h2>
+            </div>
+            <form id="logForm" class="inline-form">
+                <div class="form-group" style="flex: 2;">
+                    <label class="form-label">Action Description</label>
+                    <input class="form-input" id="logAction" placeholder="Describe the action taken..." required>
+                </div>
+                <div class="form-group" style="min-width: 160px; flex: 0;">
+                    <label class="form-label">Category</label>
+                    <select class="form-select" id="logCategory">
+                        <option value="general">General</option>
+                        <option value="setup">Setup</option>
+                        <option value="model-lab">Model Lab</option>
+                        <option value="container-pipeline">Container Pipeline</option>
+                        <option value="supply-chain">Supply Chain</option>
+                        <option value="network">Network</option>
+                        <option value="exfiltration">Exfiltration</option>
+                        <option value="api-testing">API Testing</option>
+                        <option value="lateral-movement">Lateral Movement</option>
+                        <option value="evidence">Evidence</option>
+                    </select>
+                </div>
+                <button type="submit" class="btn btn-primary" style="align-self: flex-end;">Log</button>
+            </form>
+        </div>
+
+        <!-- Summary -->
+        <div class="stats-grid" id="summaryStats">
+            <div class="stat-card">
+                <div class="stat-label">Total Entries</div>
+                <div class="stat-value" id="totalEntries">--</div>
+            </div>
+        </div>
+
+        <!-- Category Filter -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Timeline</h2>
+                <div class="btn-group">
+                    <select class="form-select" id="categoryFilter" style="width: auto;" onchange="loadTimeline()">
+                        <option value="">All Categories</option>
+                    </select>
+                    <button class="btn btn-secondary btn-sm" onclick="loadTimeline()">Refresh</button>
+                </div>
+            </div>
+            <div id="timeline">
+                <div class="spinner"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/harness.js"></script>
+    <script>
+        if (!requireAuth()) throw new Error('Not authenticated');
+
+        async function loadTimeline() {
+            try {
+                const category = document.getElementById('categoryFilter').value;
+                const opts = {};
+                if (category) opts.category = category;
+
+                const data = await HarnessAPI.getTimeline(opts);
+                document.getElementById('totalEntries').textContent = data.total;
+
+                const filter = document.getElementById('categoryFilter');
+                const currentVal = filter.value;
+                if (filter.options.length <= 1 && data.categories) {
+                    Object.keys(data.categories).sort().forEach(cat => {
+                        const opt = document.createElement('option');
+                        opt.value = cat;
+                        opt.textContent = `${cat} (${data.categories[cat]})`;
+                        filter.appendChild(opt);
+                    });
+                    filter.value = currentVal;
+                }
+
+                if (!data.entries || data.entries.length === 0) {
+                    document.getElementById('timeline').innerHTML =
+                        '<div class="empty-state">No timeline entries yet. Actions are logged automatically by test scripts, or use the form above.</div>';
+                    return;
+                }
+
+                const entries = data.entries.slice().reverse();
+                document.getElementById('timeline').innerHTML = entries.map(e => {
+                    const catColors = {
+                        'model-lab': 'badge-info', 'api-testing': 'badge-high',
+                        'network': 'badge-medium', 'supply-chain': 'badge-critical',
+                        'container-pipeline': 'badge-info', 'setup': 'badge-low',
+                    };
+                    const catClass = catColors[e.category] || 'badge-info';
+                    let artifacts = '';
+                    if (e.artifacts && e.artifacts.length > 0) {
+                        artifacts = `<div style="margin-top: 0.25rem; font-size: 0.75rem; color: var(--text-secondary);">
+                            Artifacts: ${e.artifacts.map(a => `${a.path}${a.sha256 ? ' (' + a.sha256.slice(0, 8) + '...)' : ''}`).join(', ')}
+                        </div>`;
+                    }
+                    let details = '';
+                    if (e.details && Object.keys(e.details).length > 0) {
+                        details = `<div style="margin-top: 0.25rem; font-size: 0.75rem; color: var(--text-secondary);">
+                            ${Object.entries(e.details).map(([k,v]) => `${k}: ${v}`).join(' | ')}
+                        </div>`;
+                    }
+                    return `<div class="timeline-entry">
+                        <span class="timeline-ts">${e.timestamp}</span>
+                        <span class="badge ${catClass} timeline-cat">${e.category}</span>
+                        <div class="timeline-action">${escapeHtml(e.action)}</div>
+                        ${details}${artifacts}
+                    </div>`;
+                }).join('');
+
+            } catch (e) {
+                document.getElementById('timeline').innerHTML = '<p style="color: var(--critical);">Failed to load timeline</p>';
+            }
+        }
+
+        document.getElementById('logForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const action = document.getElementById('logAction').value;
+            const category = document.getElementById('logCategory').value;
+            try {
+                await HarnessAPI.logAction(action, category);
+                document.getElementById('logAction').value = '';
+                showAlert('Action logged', 'success');
+                loadTimeline();
+            } catch (err) { showAlert('Failed to log action', 'error'); }
+        });
+
+        loadTimeline();
+    </script>
+</body>
+</html>

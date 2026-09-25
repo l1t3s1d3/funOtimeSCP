@@ -19,25 +19,60 @@ models:
     local_dir: "models/clean/minilm-reranker"
     modified_dir: "models/modified/minilm-reranker"
 
+# TEI endpoints — split by service when embedding and reranker run on separate ports
 tei:
-  host: "http://localhost:8080"
+  embedding:
+    host: "http://localhost:8081"
+    endpoints: ["/embed", "/health", "/info"]
+  reranker:
+    host: "http://localhost:8082"
+    endpoints: ["/rerank", "/health", "/info"]
+  common_endpoints: ["/metrics", "/openapi.json"]
   docker_image: "ghcr.io/huggingface/text-embeddings-inference:cpu-latest"
-  endpoints:
-    - "/info"
-    - "/embed"
-    - "/rerank"
-    - "/predict"
-    - "/tokenize"
-    - "/health"
-    - "/metrics"
-    - "/openapi.json"
+  weight_paths:
+    embedding: "/opt/tei-data"
+    reranker: "/opt/tei-rerank-data"
+
+# How you reach the target host
+access:
+  method: "ssm"          # ssm | ssh | direct
+  instance_id: ""        # EC2 instance ID (for SSM)
+  iam_role: ""           # IAM role / SSO profile for session
+  ssh_user: ""           # only for method: ssh
+  ssh_key: ""            # only for method: ssh
 
 aws:
   profile: "test-profile"
   region: "us-east-1"
+
+# Delivery pipeline — how images/weights reach the target
+delivery:
+  type: "github_ci"      # ecr | github_ci | manual
   ecr:
-    account_id: "000000000000"
-    repository: "test-repo"
+    account_id: ""
+    repository: ""
+  github_ci:
+    repo: ""             # e.g. org/repo-name
+    playbook: ""         # Ansible playbook path within repo
+    ci_platform: "circleci"
+    ci_context: ""       # CI context / project name
+  current_ami: ""        # current production AMI ID
+
+# Telemetry sources you can read during the engagement
+telemetry:
+  cloudwatch:
+    log_groups: []       # e.g. ["/stage/tei", "/aws/vpc/flow-logs/pi/stage"]
+  vpc_flow_logs: ""      # VPC flow log group if separate
+
+# Upstream application that calls the TEI service
+upstream_app:
+  name: ""
+  url: ""                # e.g. https://stage.example.com
+  test_endpoints:        # endpoints to exercise
+    - path: ""
+      method: "GET"
+      description: ""
+  caller_ips: []         # IPs of app servers calling TEI
 
 network:
   callback_host: "0.0.0.0"

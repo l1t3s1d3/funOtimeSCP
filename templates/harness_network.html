@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Testing - AI Test Harness</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/harness.css">
+</head>
+<body>
+    <header class="header">
+        <nav class="nav">
+            <a href="/harness" class="logo">AI Test Harness</a>
+            <ul class="nav-links">
+                <li><a href="/harness">Dashboard</a></li>
+                <li><a href="/harness/config">Configure</a></li>
+                <li><a href="/harness/models">Model Lab</a></li>
+                <li><a href="/harness/api-testing">API Testing</a></li>
+                <li><a href="/harness/network">Network</a></li>
+                <li><a href="/harness/containers">Containers</a></li>
+                <li><a href="/harness/evidence">Evidence</a></li>
+                <li><a href="/harness/checklist">Checklist</a></li>
+            </ul>
+            <div class="user-menu">
+                <a href="/dashboard" class="btn btn-secondary btn-sm">Back to VulnMS</a>
+                <button class="btn btn-secondary btn-sm" onclick="logout()">Logout</button>
+            </div>
+        </nav>
+    </header>
+
+    <div class="container">
+        <h1 style="color: var(--accent-gold); margin-bottom: 2rem;">Network & Exfiltration Testing</h1>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem;">
+            <!-- Egress Probe -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Egress Probe</h2>
+                </div>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Tests DNS, HTTP/S, IMDS, and common port egress from the current environment. Validates SC-7 boundary controls.</p>
+                <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1rem;">Tests: DNS resolution, HTTP/HTTPS egress, IMDS v1/v2, ports 53/80/443/8080/8443</p>
+                <button class="btn btn-primary" onclick="runEgress()">Run Egress Probe</button>
+            </div>
+
+            <!-- Lateral Movement -->
+            <div class="card">
+                <div class="card-header">
+                    <h2 class="card-title">Lateral Movement</h2>
+                </div>
+                <p style="color: var(--text-secondary); margin-bottom: 1rem;">Discovers adjacent hosts on the local subnet and probes common service ports. Run from inside the target container.</p>
+                <p style="font-size: 0.875rem; color: var(--text-secondary); margin-bottom: 1rem;">Requires: nmap (falls back to ping sweep)</p>
+                <button class="btn btn-primary" onclick="runLateral()">Run Lateral Probe</button>
+            </div>
+        </div>
+
+        <!-- Callback Listener -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">Callback Listener</h2>
+            </div>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                The callback listener runs as a standalone process on your infrastructure outside the test VPC.
+                Start it from the command line:
+            </p>
+            <div class="code-block">python3 ai-test-harness/network/callback-infra/listener.py --port 8888</div>
+            <p style="color: var(--text-secondary); margin-top: 1rem; font-size: 0.875rem;">
+                All incoming requests are logged to <code>callbacks.jsonl</code> with timestamps for correlation against the evidence timeline.
+            </p>
+        </div>
+
+        <!-- VPC Mapper -->
+        <div class="card">
+            <div class="card-header">
+                <h2 class="card-title">VPC Network Mapper</h2>
+            </div>
+            <p style="color: var(--text-secondary); margin-bottom: 1rem;">
+                Queries AWS for security groups, NACLs, and VPC flow logs. Requires AWS CLI configured with the test profile.
+                Run from the command line with environment variables set:
+            </p>
+            <div class="code-block">export SG_IDS=sg-xxx,sg-yyy
+export SUBNET_ID=subnet-xxx
+export VPC_ID=vpc-xxx
+bash ai-test-harness/network/egress-tests/vpc_mapper.sh</div>
+        </div>
+
+        <!-- Task Output -->
+        <div class="card" id="taskCard" style="display: none;">
+            <div class="card-header">
+                <h2 class="card-title">Task Output</h2>
+                <span id="taskStatus"></span>
+            </div>
+            <pre class="task-output" id="taskOutput" style="max-height: 400px;"></pre>
+        </div>
+    </div>
+
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/harness.js"></script>
+    <script>
+        if (!requireAuth()) throw new Error('Not authenticated');
+
+        function showTaskCard(taskId) {
+            document.getElementById('taskCard').style.display = 'block';
+            pollTask(taskId, document.getElementById('taskStatus'), document.getElementById('taskOutput'));
+        }
+
+        async function runEgress() {
+            try {
+                const r = await HarnessAPI.runEgressProbe();
+                showAlert(r.message, 'info');
+                showTaskCard(r.task_id);
+            } catch (e) { showAlert('Failed to start egress probe', 'error'); }
+        }
+
+        async function runLateral() {
+            try {
+                const r = await HarnessAPI.runLateralProbe();
+                showAlert(r.message, 'info');
+                showTaskCard(r.task_id);
+            } catch (e) { showAlert('Failed to start lateral probe', 'error'); }
+        }
+    </script>
+</body>
+</html>

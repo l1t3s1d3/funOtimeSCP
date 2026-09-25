@@ -14,7 +14,7 @@ from extensions import db, migrate, jwt, bcrypt, cors, init_extensions
 from models import Vulnerability, VulnerabilityHistory, User, JiraTicket, VulnerabilitySource, ImportLog, ImportError, VulnerabilityJiraTicket
 
 # Import blueprints
-from api import auth_bp, vulnerabilities_bp, jira_bp, reports_bp, import_bp
+from api import auth_bp, vulnerabilities_bp, jira_bp, reports_bp, import_bp, harness_bp
 
 
 def create_app():
@@ -58,6 +58,7 @@ def create_app():
     app.register_blueprint(jira_bp)
     app.register_blueprint(reports_bp)
     app.register_blueprint(import_bp)
+    app.register_blueprint(harness_bp)
 
     # Web routes
     @app.route('/')
@@ -94,6 +95,46 @@ def create_app():
     def import_logs_page():
         """Serve import logs page"""
         return render_template('import_logs.html')
+
+    @app.route('/harness')
+    def harness_page():
+        """Serve AI test harness dashboard"""
+        return render_template('harness.html')
+
+    @app.route('/harness/config')
+    def harness_config_page():
+        """Serve harness configuration page"""
+        return render_template('harness_config.html')
+
+    @app.route('/harness/models')
+    def harness_models_page():
+        """Serve model lab page"""
+        return render_template('harness_models.html')
+
+    @app.route('/harness/api-testing')
+    def harness_api_testing_page():
+        """Serve API testing page"""
+        return render_template('harness_api_testing.html')
+
+    @app.route('/harness/network')
+    def harness_network_page():
+        """Serve network testing page"""
+        return render_template('harness_network.html')
+
+    @app.route('/harness/containers')
+    def harness_containers_page():
+        """Serve container pipeline page"""
+        return render_template('harness_containers.html')
+
+    @app.route('/harness/evidence')
+    def harness_evidence_page():
+        """Serve evidence timeline page"""
+        return render_template('harness_evidence.html')
+
+    @app.route('/harness/checklist')
+    def harness_checklist_page():
+        """Serve deployment checklist page"""
+        return render_template('harness_checklist.html')
 
     # Create tables and initial data
     with app.app_context():
