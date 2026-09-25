@@ -6,11 +6,14 @@ class JiraTicket(db.Model):
     __tablename__ = 'jira_tickets'
 
     id = db.Column(db.Integer, primary_key=True)
-    vulnerability_id = db.Column(db.Integer, db.ForeignKey('vulnerabilities.id'), nullable=False, index=True)
+    vulnerability_id = db.Column(db.Integer, db.ForeignKey('vulnerabilities.id'), nullable=True, index=True)
+
+    # Ticket type: 'single' or 'grouped'
+    ticket_type = db.Column(db.String(20), nullable=False, default='single')
 
     # Jira information
-    jira_key = db.Column(db.String(50), unique=True, nullable=False, index=True)  # e.g., VULN-123
-    jira_id = db.Column(db.String(50), unique=True, nullable=False)  # Jira internal ID
+    jira_key = db.Column(db.String(50), unique=True, nullable=False, index=True)
+    jira_id = db.Column(db.String(50), unique=True, nullable=False)
     jira_url = db.Column(db.String(500))
 
     # Ticket details
@@ -19,24 +22,34 @@ class JiraTicket(db.Model):
     description = db.Column(db.Text)
 
     # Status tracking
-    status = db.Column(db.String(50), nullable=False, default='Open')  # Open, In Progress, Resolved, Closed, etc.
+    status = db.Column(db.String(50), nullable=False, default='Open')
     assignee = db.Column(db.String(200))
     reporter = db.Column(db.String(200))
 
     # Metadata
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
-    created_by = db.Column(db.String(200))  # User who created the ticket in our system
+    created_by = db.Column(db.String(200))
 
     # Sync information
-    last_synced_at = db.Column(db.DateTime)  # Last time we synced with Jira
-    sync_error = db.Column(db.Text)  # Any errors during sync
+    last_synced_at = db.Column(db.DateTime)
+    sync_error = db.Column(db.Text)
+
+    # Many-to-many relationship with vulnerabilities
+    vulnerabilities = db.relationship(
+        'Vulnerability',
+        secondary='vulnerability_jira_tickets',
+        backref=db.backref('linked_jira_tickets', lazy='dynamic')
+    )
 
     def to_dict(self):
         """Convert ticket to dictionary"""
         return {
             'id': self.id,
             'vulnerability_id': self.vulnerability_id,
+            'ticket_type': self.ticket_type,
+            'vulnerability_count': len(self.vulnerabilities) if self.vulnerabilities else (1 if self.vulnerability_id else 0),
+            'vulnerability_ids': [v.id for v in self.vulnerabilities] if self.vulnerabilities else ([self.vulnerability_id] if self.vulnerability_id else []),
             'jira_key': self.jira_key,
             'jira_id': self.jira_id,
             'jira_url': self.jira_url,

@@ -11,7 +11,7 @@ load_dotenv()
 from extensions import db, migrate, jwt, bcrypt, cors, init_extensions
 
 # Import models (needed for migrations)
-from models import Vulnerability, VulnerabilityHistory, User, JiraTicket, VulnerabilitySource, ImportLog, ImportError
+from models import Vulnerability, VulnerabilityHistory, User, JiraTicket, VulnerabilitySource, ImportLog, ImportError, VulnerabilityJiraTicket
 
 # Import blueprints
 from api import auth_bp, vulnerabilities_bp, jira_bp, reports_bp, import_bp, harness_bp
