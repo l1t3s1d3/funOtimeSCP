@@ -9,6 +9,9 @@ Usage:
 import datetime
 import json
 import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import click
 from jinja2 import Environment, FileSystemLoader
